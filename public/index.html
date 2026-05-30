@@ -1,0 +1,2446 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Auditor Escrutinio Presidencial 2026</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Segoe UI',Arial,sans-serif;background:#f5f7fa;color:#2c3e50;min-height:100vh}
+  /* LOGIN */
+  #login-screen{display:flex;align-items:center;justify-content:center;min-height:100vh;
+    background:linear-gradient(135deg,#1e3a8a 0%,#2c3e50 100%)}
+  .login-card{background:#fff;padding:36px;border-radius:14px;box-shadow:0 10px 40px rgba(0,0,0,0.3);
+    width:380px;max-width:90vw}
+  .login-card h1{font-size:22px;color:#1e3a8a;text-align:center;margin-bottom:6px}
+  .login-card .subtitle{text-align:center;color:#888;font-size:13px;margin-bottom:24px}
+  .login-card label{display:block;font-size:13px;font-weight:600;color:#555;margin:14px 0 5px}
+  .login-card input{width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:14px}
+  .login-card input:focus{outline:none;border-color:#1e3a8a;box-shadow:0 0 0 3px rgba(30,58,138,0.1)}
+  .login-card button{width:100%;padding:11px;background:linear-gradient(135deg,#1e3a8a,#2563eb);color:#fff;
+    border:none;border-radius:6px;font-size:14px;font-weight:600;cursor:pointer;margin-top:20px}
+  .login-card button:hover{opacity:0.92}
+  .login-card button:disabled{opacity:0.5;cursor:wait}
+  .login-error{margin-top:14px;padding:10px;background:#fef2f2;border-left:3px solid #ef4444;
+    color:#991b1b;font-size:13px;border-radius:4px;display:none}
+  /* APP */
+  #app{display:none;min-height:100vh}
+  .topbar{background:linear-gradient(135deg,#1e3a8a,#2c3e50);color:#fff;padding:10px 18px;
+    display:flex;align-items:center;justify-content:space-between;box-shadow:0 2px 6px rgba(0,0,0,0.15)}
+  .topbar h1{font-size:16px;font-weight:600}
+  .topbar .user-info{font-size:13px;display:flex;gap:14px;align-items:center}
+  .topbar .logout-btn{background:#dc3545;color:#fff;border:none;padding:6px 14px;border-radius:5px;
+    cursor:pointer;font-size:13px;font-weight:600}
+  .topbar .logout-btn:hover{background:#c82333}
+  .layout{display:flex;min-height:calc(100vh - 50px)}
+  .sidebar{width:240px;background:#1f2937;color:#cbd5e1;padding:16px 0;overflow-y:auto}
+  .sidebar .group-title{padding:10px 18px 6px;font-size:11px;color:#64748b;text-transform:uppercase;
+    letter-spacing:0.5px;font-weight:700}
+  .sidebar a{display:block;padding:9px 18px;color:#cbd5e1;text-decoration:none;font-size:13.5px;
+    border-left:3px solid transparent;transition:all 0.15s}
+  .sidebar a:hover{background:#374151;color:#fff;border-left-color:#3b82f6}
+  .sidebar a.active{background:#374151;color:#fff;border-left-color:#3b82f6}
+  .content{flex:1;padding:22px 28px;overflow-x:auto}
+  .module{display:none}
+  .module.active{display:block}
+  .card{background:#fff;border-radius:10px;padding:22px;margin-bottom:18px;box-shadow:0 1px 4px rgba(0,0,0,0.06)}
+  .card h2{font-size:18px;color:#1e3a8a;margin-bottom:10px}
+  .placeholder{padding:60px 20px;text-align:center;color:#94a3b8}
+  .badge{display:inline-block;padding:2px 8px;background:#fef3c7;color:#92400e;border-radius:10px;
+    font-size:11px;font-weight:600}
+  /* Tabla común y filtros */
+  .filters-grid{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px;align-items:flex-end}
+  .filter-group{display:flex;flex-direction:column;min-width:200px}
+  .filter-group label{font-size:12px;font-weight:600;color:#555;margin-bottom:4px}
+  .filter-group select{padding:7px 9px;border:1px solid #d1d5db;border-radius:5px;font-size:13.5px}
+  .filter-group select:disabled{background:#f3f4f6;cursor:not-allowed}
+  table{width:100%;border-collapse:collapse;font-size:13.5px;background:#fff}
+  table th{padding:8px 10px;background:#1e3a8a;color:#fff;text-align:left;font-weight:600;border:1px solid #1e3a8a}
+  table td{padding:7px 10px;border:1px solid #e2e8f0}
+  table td.number{text-align:right;font-variant-numeric:tabular-nums}
+  table tbody tr:nth-child(even){background:#f8fafc}
+  .loading{padding:14px;color:#1e3a8a;font-weight:600}
+  .error{padding:10px;background:#fef2f2;border-left:3px solid #ef4444;color:#991b1b;border-radius:4px}
+</style>
+</head>
+<body>
+
+<!-- ====================== LOGIN ====================== -->
+<div id="login-screen">
+  <div class="login-card">
+    <h1>Auditor Escrutinio</h1>
+    <div class="subtitle">Presidencial 2026</div>
+    <form id="login-form" onsubmit="event.preventDefault(); doLogin();">
+      <label>Cédula</label>
+      <input type="text" id="login-cedula" autocomplete="username" required>
+      <label>Contraseña</label>
+      <input type="password" id="login-password" autocomplete="current-password" required>
+      <button type="submit" id="login-btn">Ingresar</button>
+      <div id="login-error" class="login-error"></div>
+    </form>
+  </div>
+</div>
+
+<!-- ====================== APP ====================== -->
+<div id="app">
+  <div class="topbar">
+    <h1>🗳️ Auditor Escrutinio Presidencial 2026</h1>
+    <div class="user-info">
+      <span id="user-display"></span>
+      <button class="logout-btn" onclick="doLogout()">Cerrar Sesión</button>
+    </div>
+  </div>
+  <div class="layout">
+    <nav class="sidebar">
+      <div class="group-title">Inicio</div>
+      <a href="#" onclick="cambiarModulo('mod-home', this); return false;" class="active">🏠 Tablero</a>
+
+      <div class="group-title">Cargues</div>
+      <a href="#" onclick="cambiarModulo('mod-divipol', this); divipolInit(); return false;">🗺️ Divipol <span class="badge" style="background:#dcfce7;color:#166534">listo</span></a>
+      <a href="#" onclick="cambiarModulo('mod-mmv-preconteo', this); mmvCargarHistorial(); return false;">📥 MMV Preconteo <span class="badge" style="background:#dcfce7;color:#166534">listo</span></a>
+      <a href="#" onclick="cambiarModulo('mod-mmv-escrutinio', this); escInit(); return false;">📥 MMV Escrutinio <span class="badge" style="background:#dcfce7;color:#166534">listo</span></a>
+
+      <div class="group-title">Consultas</div>
+      <a href="#" onclick="cambiarModulo('mod-consulta-preconteo', this); cprInit(); return false;">🔎 Consulta Votación Preconteo <span class="badge" style="background:#dcfce7;color:#166534">listo</span></a>
+      <a href="#" onclick="cambiarModulo('mod-consulta-escrutinio', this); ceeInit(); return false;">🔎 Consulta Votación Escrutinio <span class="badge" style="background:#dcfce7;color:#166534">listo</span></a>
+
+      <div class="group-title">Visores</div>
+      <a href="#" onclick="cambiarModulo('mod-visor-e14', this); return false;">📄 Visor E14 <span class="badge">por hacer</span></a>
+      <a href="#" onclick="cambiarModulo('mod-visor-e24', this); return false;">📄 Visor E24 <span class="badge">por hacer</span></a>
+
+      <div class="group-title">Análisis</div>
+      <a href="#" onclick="cambiarModulo('mod-investigaciones', this); invInit(); return false;">🔍 Investigaciones <span class="badge" style="background:#dcfce7;color:#166534">listo</span></a>
+      <a href="#" onclick="cambiarModulo('mod-evidencias', this); return false;">📎 Evidencias <span class="badge">por hacer</span></a>
+    </nav>
+
+    <main class="content">
+      <div id="mod-home" class="module active">
+        <div class="card">
+          <h2>👋 Bienvenido</h2>
+          <p>Auditor Escrutinio Presidencial 2026 — bootstrap inicial.</p>
+          <p style="margin-top:8px;color:#666;font-size:14px;">
+            Los módulos se irán activando a medida que se construyan. Empezar por Divipol.
+          </p>
+        </div>
+      </div>
+
+      <div id="mod-divipol" class="module">
+        <!-- Resumen -->
+        <div class="card">
+          <h2>🗺️ Divipol Presidencial 2026</h2>
+          <div id="divipol-resumen" style="display:flex;gap:14px;flex-wrap:wrap;margin-top:8px"></div>
+        </div>
+
+        <!-- Filtros en cascada (idéntico Congreso) -->
+        <div class="card">
+          <div class="filters-grid">
+            <div class="filter-group">
+              <label for="filtro-divipol-depto">Departamento</label>
+              <select id="filtro-divipol-depto" onchange="onDivipolDeptoChange()">
+                <option value="">-- Todos --</option>
+              </select>
+            </div>
+            <div class="filter-group">
+              <label for="filtro-divipol-mpio">Municipio</label>
+              <select id="filtro-divipol-mpio" onchange="onDivipolMpioChange()" disabled>
+                <option value="">-- Todos --</option>
+              </select>
+            </div>
+            <div class="filter-group">
+              <label for="filtro-divipol-zona">Zona</label>
+              <select id="filtro-divipol-zona" onchange="onDivipolZonaChange()" disabled>
+                <option value="">-- Todas --</option>
+              </select>
+            </div>
+            <div class="filter-group" style="min-width:auto;justify-content:flex-end">
+              <button onclick="limpiarFiltrosDivipol()" style="padding:8px 16px;background:#dc3545;color:#fff;border:none;border-radius:5px;cursor:pointer;font-size:13.5px;font-weight:600">Limpiar filtros</button>
+            </div>
+          </div>
+          <div id="divipol-loading" class="loading" style="display:none">Cargando datos...</div>
+          <div id="divipol-content">
+            <p style="color:#666;font-style:italic">Cargando datos...</p>
+          </div>
+        </div>
+      </div>
+
+      <div id="mod-mmv-preconteo" class="module">
+        <!-- Carga individual -->
+        <div class="card">
+          <h2>📁 Cargue de Archivos MMV — Preconteo</h2>
+          <div style="padding:16px 0">
+            <div style="border:2px dashed #2563eb;border-radius:12px;padding:32px;text-align:center;background:#eff6ff">
+              <div style="font-size:42px">📤</div>
+              <p style="color:#1e3a8a;font-size:1.05em;font-weight:600;margin:10px 0 4px">Seleccionar un archivo MMV — Preconteo</p>
+              <p style="color:#888;font-size:0.88em;margin-bottom:14px">Formatos aceptados: .csv, .txt, .dat</p>
+              <input type="file" id="mmv-input-archivo" accept=".csv,.txt,.dat" style="display:none" onchange="mmvArchivoSeleccionado()">
+              <button onclick="document.getElementById('mmv-input-archivo').click()"
+                      style="padding:9px 26px;background:linear-gradient(135deg,#1e3a8a,#2563eb);color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:600">Examinar...</button>
+            </div>
+
+            <div id="mmv-info-archivo" style="display:none;margin-top:18px;padding:16px;background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0">
+              <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:14px">
+                <div>
+                  <p style="margin:0;font-weight:600" id="mmv-info-nombre"></p>
+                  <p style="margin:4px 0 0;color:#666;font-size:0.9em" id="mmv-info-detalle"></p>
+                </div>
+                <div style="display:flex;gap:8px;align-items:center">
+                  <label style="display:flex;align-items:center;gap:5px;color:#555;font-size:0.9em">
+                    <input type="checkbox" id="mmv-check-encabezado" checked onchange="mmvRecalcular()">
+                    Tiene encabezado
+                  </label>
+                  <button onclick="mmvEnviar()" id="mmv-btn-cargar"
+                          style="padding:8px 22px;background:#16a34a;color:#fff;border:none;border-radius:5px;cursor:pointer;font-weight:600">Cargar</button>
+                  <button onclick="mmvCancelar()"
+                          style="padding:8px 14px;background:#dc3545;color:#fff;border:none;border-radius:5px;cursor:pointer">Cancelar</button>
+                </div>
+              </div>
+            </div>
+
+
+            <div id="mmv-resultado" style="display:none;margin-top:14px;padding:12px 16px;border-radius:6px"></div>
+          </div>
+        </div>
+
+        <!-- Carga masiva -->
+        <div class="card">
+          <h2>📂 Carga Masiva</h2>
+          <div style="padding:16px 0">
+            <div style="border:2px dashed #16a34a;border-radius:12px;padding:30px;text-align:center;background:#f0fdf4">
+              <div style="font-size:42px">📁</div>
+              <p style="color:#166534;font-size:1.05em;font-weight:600;margin:10px 0 4px">Seleccionar múltiples archivos MMV — Preconteo</p>
+              <input type="file" id="mmv-input-masivo" accept=".csv,.txt,.dat" multiple style="display:none" onchange="mmvMasivoSeleccionado()">
+              <div style="display:flex;gap:10px;justify-content:center;align-items:center;margin-top:10px">
+                <button onclick="document.getElementById('mmv-input-masivo').click()"
+                        style="padding:9px 26px;background:linear-gradient(135deg,#16a34a,#22c55e);color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:600">Seleccionar Archivos...</button>
+                <label style="display:flex;align-items:center;gap:5px;color:#555;font-size:0.9em">
+                  <input type="checkbox" id="mmv-check-encab-masivo" checked> Tienen encabezado
+                </label>
+              </div>
+            </div>
+            <div id="mmv-lista-masivo" style="display:none;margin-top:16px">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+                <h3 style="margin:0" id="mmv-titulo-masivo"></h3>
+                <div style="display:flex;gap:8px">
+                  <button onclick="mmvIniciarMasivo()" id="mmv-btn-masivo"
+                          style="padding:8px 22px;background:#16a34a;color:#fff;border:none;border-radius:5px;cursor:pointer;font-weight:600">Cargar Todos</button>
+                  <button onclick="mmvCancelarMasivo()" style="padding:8px 14px;background:#dc3545;color:#fff;border:none;border-radius:5px;cursor:pointer">Cancelar</button>
+                </div>
+              </div>
+              <div id="mmv-tabla-masivo"></div>
+              <div id="mmv-progreso-masivo" style="display:none;margin-top:12px">
+                <div style="display:flex;justify-content:space-between;margin-bottom:5px">
+                  <span style="color:#555;font-size:0.88em" id="mmv-progreso-texto">Procesando...</span>
+                  <span style="color:#16a34a;font-weight:600;font-size:0.88em" id="mmv-progreso-pct">0%</span>
+                </div>
+                <div style="background:#e9ecef;border-radius:6px;height:10px;overflow:hidden">
+                  <div id="mmv-progreso-barra" style="background:linear-gradient(135deg,#16a34a,#22c55e);height:100%;width:0%;transition:width 0.3s;border-radius:6px"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Historial con pestañas -->
+        <div class="card">
+          <h2>📋 Historial de Archivos</h2>
+
+          <!-- Toolbar -->
+          <div style="margin:8px 0;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <button onclick="mmvCargarHistorial()" style="padding:6px 16px;background:#1e3a8a;color:#fff;border:none;border-radius:5px;cursor:pointer;font-size:0.9em">🔄 Refrescar</button>
+            <button onclick="mmvProcesarTodos()" style="padding:6px 16px;background:#16a34a;color:#fff;border:none;border-radius:5px;cursor:pointer;font-size:0.9em">⚙️ Procesar todos los pendientes</button>
+            <button id="mmv-btn-eliminar-sel" onclick="mmvEliminarSeleccionados()" style="display:none;padding:6px 16px;background:#dc3545;color:#fff;border:none;border-radius:5px;cursor:pointer;font-size:0.9em">🗑 Eliminar seleccionados (<span id="mmv-count-sel">0</span>)</button>
+          </div>
+
+          <!-- Pestañas -->
+          <div style="display:flex;gap:0;border-bottom:2px solid #e2e8f0;margin-top:6px">
+            <button id="mmv-tab-pendientes" onclick="mmvCambiarTab('pendientes')" class="mmv-tab"
+                    style="padding:10px 18px;background:#fff;border:none;border-bottom:3px solid #f59e0b;font-weight:700;color:#f59e0b;cursor:pointer;font-size:14px">
+              ⏳ Pendientes (<span id="mmv-count-pendientes">0</span>)
+            </button>
+            <button id="mmv-tab-procesados" onclick="mmvCambiarTab('procesados')" class="mmv-tab"
+                    style="padding:10px 18px;background:#fff;border:none;border-bottom:3px solid transparent;font-weight:600;color:#94a3b8;cursor:pointer;font-size:14px">
+              ✅ Procesados (<span id="mmv-count-procesados">0</span>)
+            </button>
+          </div>
+
+          <!-- Filtros -->
+          <div style="display:flex;gap:10px;flex-wrap:wrap;margin:12px 0;align-items:end">
+            <div class="filter-group" style="min-width:240px">
+              <label>Buscar por nombre</label>
+              <input type="text" id="mmv-filtro-nombre" oninput="mmvRefrescarRender()"
+                     placeholder="ej. PRES_MMV_01" style="padding:7px 9px;border:1px solid #d1d5db;border-radius:5px;font-size:13.5px">
+            </div>
+            <div class="filter-group">
+              <label>Depto</label>
+              <select id="mmv-filtro-depto" onchange="mmvRefrescarRender()"
+                      style="padding:7px 9px;border:1px solid #d1d5db;border-radius:5px;font-size:13.5px">
+                <option value="">Todos</option>
+              </select>
+            </div>
+            <div class="filter-group">
+              <label>Por página</label>
+              <select id="mmv-pagsize" onchange="mmvCambiarPagina(1)"
+                      style="padding:7px 9px;border:1px solid #d1d5db;border-radius:5px;font-size:13.5px">
+                <option value="25">25</option>
+                <option value="50" selected>50</option>
+                <option value="100">100</option>
+                <option value="200">200</option>
+              </select>
+            </div>
+            <button onclick="mmvLimpiarFiltros()" style="padding:8px 14px;background:#94a3b8;color:#fff;border:none;border-radius:5px;cursor:pointer;font-size:13px">🧹 Limpiar</button>
+          </div>
+
+          <div id="mmv-historial-loading" class="loading" style="display:none">Cargando historial...</div>
+          <div id="mmv-historial-content"></div>
+          <div id="mmv-paginacion" style="display:flex;gap:6px;align-items:center;justify-content:center;flex-wrap:wrap;margin-top:12px"></div>
+        </div>
+      </div>
+      <div id="mod-mmv-escrutinio" class="module">
+        <!-- Carga individual -->
+        <div class="card">
+          <h2>📋 Carga de Archivos — Escrutinio RNEC</h2>
+          <div style="padding:16px 0">
+            <div style="border:2px dashed #e67e22;border-radius:12px;padding:30px;text-align:center;background:#fff7ed">
+              <div style="font-size:42px">📥</div>
+              <p style="color:#9a3412;font-size:1.05em;font-weight:600;margin:10px 0 4px">Seleccionar un archivo de Escrutinio RNEC</p>
+              <p style="color:#888;font-size:0.88em;margin-bottom:14px">CSV separado por `;` (formato RNEC, 22 campos). Formatos: .csv .txt .dat</p>
+              <div style="display:flex;gap:14px;justify-content:center;align-items:center;flex-wrap:wrap;margin-bottom:12px">
+                <label style="display:flex;align-items:center;gap:8px;color:#555;font-weight:600">
+                  Fecha de acceso:
+                  <input type="date" id="esc-facceso" style="padding:7px 10px;border:2px solid #e67e22;border-radius:5px;font-size:0.95em">
+                </label>
+              </div>
+              <input type="file" id="esc-input-archivo" accept=".csv,.txt,.dat" style="display:none" onchange="escArchivoSeleccionado()">
+              <button onclick="escValidarFechaYAbrir()"
+                      style="padding:9px 26px;background:linear-gradient(135deg,#e67e22,#d97706);color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:600">Examinar...</button>
+            </div>
+
+            <div id="esc-info-archivo" style="display:none;margin-top:18px;padding:16px;background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0">
+              <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:14px">
+                <div>
+                  <p style="margin:0;font-weight:600" id="esc-info-nombre"></p>
+                  <p style="margin:4px 0 0;color:#666;font-size:0.9em" id="esc-info-detalle"></p>
+                </div>
+                <div style="display:flex;gap:8px;align-items:center">
+                  <label style="display:flex;align-items:center;gap:5px;color:#555;font-size:0.9em">
+                    <input type="checkbox" id="esc-check-encab" checked> Tiene encabezado
+                  </label>
+                  <button onclick="escEnviar()" id="esc-btn-cargar"
+                          style="padding:8px 22px;background:#e67e22;color:#fff;border:none;border-radius:5px;cursor:pointer;font-weight:600">Cargar</button>
+                  <button onclick="escCancelar()" style="padding:8px 14px;background:#dc3545;color:#fff;border:none;border-radius:5px;cursor:pointer">Cancelar</button>
+                  <span id="esc-cronometro" style="display:none;margin-left:8px;font-weight:700;color:#e67e22;font-family:monospace">⏱ 00:00</span>
+                </div>
+              </div>
+            </div>
+            <div id="esc-resultado" style="display:none;margin-top:12px;padding:12px 16px;border-radius:6px"></div>
+          </div>
+        </div>
+
+        <!-- Carga por ruta local -->
+        <div class="card">
+          <h2>📁 Carga por Ruta Local (Archivos Grandes)</h2>
+          <div style="padding:14px 0">
+            <div style="border:2px dashed #16a34a;border-radius:12px;padding:24px;background:#f0fdf4">
+              <p style="color:#166534;font-size:1em;font-weight:600;margin:0 0 4px">Carga directa desde el disco del servidor (sin subir por navegador)</p>
+              <p style="color:#888;font-size:0.85em;margin-bottom:14px">Ideal para archivos &gt; 500 MB. Indique la ruta completa en el servidor.</p>
+              <div style="display:flex;gap:10px;align-items:end;flex-wrap:wrap">
+                <div style="flex:1;min-width:250px">
+                  <label style="display:block;color:#555;font-weight:600;margin-bottom:4px;font-size:0.88em">Ruta del archivo</label>
+                  <input type="text" id="esc-ruta" placeholder="/opt/.../archivo.csv" style="width:100%;padding:9px 12px;border:2px solid #16a34a;border-radius:5px;font-size:0.95em;font-family:monospace;box-sizing:border-box">
+                </div>
+                <div>
+                  <label style="display:block;color:#555;font-weight:600;margin-bottom:4px;font-size:0.88em">Fecha de acceso</label>
+                  <input type="date" id="esc-ruta-facceso" style="padding:9px 12px;border:2px solid #16a34a;border-radius:5px;font-size:0.95em">
+                </div>
+                <label style="display:flex;align-items:center;gap:5px;color:#555;font-size:0.85em;padding-bottom:2px">
+                  <input type="checkbox" id="esc-ruta-check-encab" checked> Encabezado
+                </label>
+                <button onclick="escCargarRuta()" id="esc-btn-ruta" style="padding:9px 22px;background:linear-gradient(135deg,#16a34a,#22c55e);color:#fff;border:none;border-radius:5px;cursor:pointer;font-weight:600">Cargar</button>
+              </div>
+              <div id="esc-ruta-progreso" style="display:none;margin-top:12px;padding:12px;background:#dcfce7;border-left:3px solid #16a34a;border-radius:4px">
+                <span id="esc-ruta-texto" style="color:#166534;font-weight:600">⏳ Procesando...</span>
+                <span id="esc-ruta-cron" style="margin-left:14px;font-family:monospace;font-weight:700;color:#166534">⏱ 00:00</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Carga masiva -->
+        <div class="card">
+          <h2>📂 Carga Masiva — Escrutinio RNEC</h2>
+          <div style="padding:14px 0">
+            <div style="border:2px dashed #d97706;border-radius:12px;padding:24px;text-align:center;background:#fffbeb">
+              <p style="color:#9a3412;font-size:1em;font-weight:600;margin-bottom:8px">Seleccione múltiples archivos. Se usa la misma fecha de acceso del cargue individual.</p>
+              <input type="file" id="esc-input-masivo" accept=".csv,.txt,.dat" multiple style="display:none" onchange="escMasivoSeleccionado()">
+              <div style="display:flex;gap:10px;justify-content:center;align-items:center;flex-wrap:wrap">
+                <button onclick="escValidarFechaYAbrirMasivo()"
+                        style="padding:9px 26px;background:linear-gradient(135deg,#d97706,#b45309);color:#fff;border:none;border-radius:5px;cursor:pointer;font-weight:600">Seleccionar Archivos...</button>
+                <label style="display:flex;align-items:center;gap:5px;color:#555;font-size:0.9em">
+                  <input type="checkbox" id="esc-check-encab-masivo" checked> Tienen encabezado
+                </label>
+              </div>
+            </div>
+            <div id="esc-lista-masivo" style="display:none;margin-top:14px">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+                <h3 style="margin:0" id="esc-titulo-masivo"></h3>
+                <div style="display:flex;gap:8px">
+                  <button onclick="escIniciarMasivo()" id="esc-btn-masivo" style="padding:8px 22px;background:#e67e22;color:#fff;border:none;border-radius:5px;cursor:pointer;font-weight:600">Cargar Todos</button>
+                  <button onclick="escCancelarMasivo()" style="padding:8px 14px;background:#dc3545;color:#fff;border:none;border-radius:5px;cursor:pointer">Cancelar</button>
+                </div>
+              </div>
+              <div id="esc-tabla-masivo"></div>
+              <div id="esc-progreso-masivo" style="display:none;margin-top:12px">
+                <div style="display:flex;justify-content:space-between;margin-bottom:5px">
+                  <span style="color:#555;font-size:0.88em" id="esc-progreso-texto">Procesando...</span>
+                  <span style="color:#e67e22;font-weight:600;font-size:0.88em" id="esc-progreso-pct">0%</span>
+                </div>
+                <div style="background:#e9ecef;border-radius:6px;height:10px;overflow:hidden">
+                  <div id="esc-progreso-barra" style="background:linear-gradient(135deg,#e67e22,#d97706);height:100%;width:0%;transition:width 0.3s;border-radius:6px"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Estado por día -->
+        <div class="card">
+          <h2>📊 Estado de Procesamiento por Día</h2>
+          <div id="esc-estado-content"><p style="color:#666;font-style:italic">Cargando...</p></div>
+        </div>
+
+        <!-- Historial con pestañas -->
+        <div class="card">
+          <h2>📋 Historial de Archivos Escrutinio</h2>
+          <div style="margin:8px 0;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <button onclick="escCargarHistorial()" style="padding:6px 16px;background:#1e3a8a;color:#fff;border:none;border-radius:5px;cursor:pointer;font-size:0.9em">🔄 Refrescar</button>
+            <button id="esc-btn-eliminar-sel" onclick="escEliminarSeleccionados()" style="display:none;padding:6px 16px;background:#dc3545;color:#fff;border:none;border-radius:5px;cursor:pointer;font-size:0.9em">🗑 Eliminar seleccionados (<span id="esc-count-sel">0</span>)</button>
+          </div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;margin:12px 0;align-items:end">
+            <div class="filter-group" style="min-width:240px">
+              <label>Buscar por nombre</label>
+              <input type="text" id="esc-filtro-nombre" oninput="escRefrescarRender()" placeholder="..."
+                     style="padding:7px 9px;border:1px solid #d1d5db;border-radius:5px;font-size:13.5px">
+            </div>
+            <div class="filter-group">
+              <label>Depto</label>
+              <select id="esc-filtro-depto" onchange="escRefrescarRender()"
+                      style="padding:7px 9px;border:1px solid #d1d5db;border-radius:5px;font-size:13.5px">
+                <option value="">Todos</option>
+              </select>
+            </div>
+            <div class="filter-group">
+              <label>Fecha acceso</label>
+              <select id="esc-filtro-facceso" onchange="escRefrescarRender()"
+                      style="padding:7px 9px;border:1px solid #d1d5db;border-radius:5px;font-size:13.5px">
+                <option value="">Todas</option>
+              </select>
+            </div>
+            <div class="filter-group">
+              <label>Por página</label>
+              <select id="esc-pagsize" onchange="escCambiarPagina(1)"
+                      style="padding:7px 9px;border:1px solid #d1d5db;border-radius:5px;font-size:13.5px">
+                <option value="25">25</option>
+                <option value="50" selected>50</option>
+                <option value="100">100</option>
+                <option value="200">200</option>
+              </select>
+            </div>
+            <button onclick="escLimpiarFiltros()" style="padding:8px 14px;background:#94a3b8;color:#fff;border:none;border-radius:5px;cursor:pointer;font-size:13px">🧹 Limpiar</button>
+          </div>
+          <div id="esc-historial-loading" class="loading" style="display:none">Cargando...</div>
+          <div id="esc-historial-content"></div>
+          <div id="esc-paginacion" style="display:flex;gap:6px;align-items:center;justify-content:center;flex-wrap:wrap;margin-top:12px"></div>
+        </div>
+      </div>
+      <div id="mod-consulta-preconteo" class="module">
+        <div class="card">
+          <h2>🔎 Consulta Votación Preconteo Presidencial 2026</h2>
+          <div class="filters-grid">
+            <div class="filter-group">
+              <label>Departamento</label>
+              <select id="cpr-depto" onchange="cprOnDeptoChange()"><option value="">Todos</option></select>
+            </div>
+            <div class="filter-group">
+              <label>Municipio</label>
+              <select id="cpr-mpio" onchange="cprOnMpioChange()" disabled><option value="">Todos</option></select>
+            </div>
+            <div class="filter-group">
+              <label>Zona</label>
+              <select id="cpr-zona" onchange="cprOnZonaChange()" disabled><option value="">Todas</option></select>
+            </div>
+            <div class="filter-group">
+              <label>Puesto</label>
+              <select id="cpr-puesto" disabled><option value="">Todos</option></select>
+            </div>
+            <div class="filter-group">
+              <label>Candidato</label>
+              <select id="cpr-candidato"><option value="">Todos</option></select>
+            </div>
+            <div class="filter-group" style="min-width:auto;flex-direction:row;align-items:flex-end;gap:6px">
+              <button onclick="cprBuscar()" id="cpr-btn-buscar" style="padding:8px 18px;background:linear-gradient(135deg,#1e3a8a,#2563eb);color:#fff;border:none;border-radius:5px;cursor:pointer;font-weight:600">🔍 Buscar</button>
+              <button onclick="cprLimpiar()" style="padding:8px 14px;background:#dc3545;color:#fff;border:none;border-radius:5px;cursor:pointer">🧹 Limpiar</button>
+            </div>
+          </div>
+          <div id="cpr-loading" class="loading" style="display:none">Buscando...</div>
+          <div id="cpr-content"><p style="color:#666;font-style:italic">Seleccione filtros y presione "Buscar".</p></div>
+        </div>
+      </div>
+
+      <div id="mod-consulta-escrutinio" class="module">
+        <div class="card">
+          <h2>🔎 Consulta Votación Escrutinio Presidencial 2026</h2>
+          <p style="color:#666;font-size:0.88em;margin-bottom:12px">
+            Consulta los votos del escrutinio RNEC procesado. Usa la columna del día seleccionado (o el último si no se elige), tomando el valor más reciente disponible para cada mesa con <code>COALESCE</code> hacia atrás.
+          </p>
+          <div class="filters-grid">
+            <div class="filter-group">
+              <label>Día escrutinio</label>
+              <select id="cee-dia" style="padding:7px 9px;border:1px solid #d1d5db;border-radius:5px;font-size:13.5px"><option value="">Último día</option></select>
+            </div>
+            <div class="filter-group">
+              <label>Departamento</label>
+              <select id="cee-depto" onchange="ceeOnDeptoChange()"><option value="">Todos</option></select>
+            </div>
+            <div class="filter-group">
+              <label>Municipio</label>
+              <select id="cee-mpio" onchange="ceeOnMpioChange()" disabled><option value="">Todos</option></select>
+            </div>
+            <div class="filter-group">
+              <label>Zona</label>
+              <select id="cee-zona" onchange="ceeOnZonaChange()" disabled><option value="">Todas</option></select>
+            </div>
+            <div class="filter-group">
+              <label>Puesto</label>
+              <select id="cee-puesto" disabled><option value="">Todos</option></select>
+            </div>
+            <div class="filter-group">
+              <label>Candidato</label>
+              <select id="cee-candidato"><option value="">Todos</option></select>
+            </div>
+            <div class="filter-group" style="min-width:auto;flex-direction:row;align-items:flex-end;gap:6px">
+              <button onclick="ceeBuscar()" id="cee-btn-buscar" style="padding:8px 18px;background:linear-gradient(135deg,#1e3a8a,#2563eb);color:#fff;border:none;border-radius:5px;cursor:pointer;font-weight:600">🔍 Buscar</button>
+              <button onclick="ceeLimpiar()" style="padding:8px 14px;background:#dc3545;color:#fff;border:none;border-radius:5px;cursor:pointer">🧹 Limpiar</button>
+            </div>
+          </div>
+          <div id="cee-loading" class="loading" style="display:none">Buscando...</div>
+          <div id="cee-info" style="display:none;margin-bottom:10px;padding:8px 14px;background:#e8f4fd;border-radius:6px;font-size:0.85em;color:#1e3a8a"></div>
+          <div id="cee-content"><p style="color:#666;font-style:italic">Seleccione filtros y presione "Buscar".</p></div>
+        </div>
+      </div>
+
+      <div id="mod-visor-e14" class="module"><div class="card"><h2>📄 Visor E14</h2><div class="placeholder">Por hacer.</div></div></div>
+      <div id="mod-visor-e24" class="module"><div class="card"><h2>📄 Visor E24</h2><div class="placeholder">Por hacer.</div></div></div>
+      <div id="mod-investigaciones" class="module">
+        <!-- Comparar 2 candidatos -->
+        <div class="card">
+          <h2>⚖️ Comparar 2 Candidatos — Presidencial 2026</h2>
+          <p style="color:#666;font-size:0.88em;margin-bottom:10px">Compara mesa a mesa la votación entre 2 candidatos (preconteo vs último día de escrutinio).</p>
+          <div class="filters-grid">
+            <div class="filter-group">
+              <label>Día escrutinio</label>
+              <select id="inv-dia"><option value="">Último día</option></select>
+            </div>
+            <div class="filter-group">
+              <label>Departamento</label>
+              <select id="inv-depto" onchange="invOnDeptoChange()"><option value="">Todos</option></select>
+            </div>
+            <div class="filter-group">
+              <label>Municipio</label>
+              <select id="inv-mpio" disabled><option value="">Todos</option></select>
+            </div>
+          </div>
+          <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:8px">
+            <div style="flex:1;min-width:240px;background:#e8f4fd;padding:12px;border-radius:8px;border-left:4px solid #2563eb">
+              <strong style="color:#1e3a8a;font-size:0.9em">🔵 Lado A</strong>
+              <label style="font-size:0.82em;font-weight:600;color:#555;display:block;margin:8px 0 4px">Candidato</label>
+              <select id="inv-cand1" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;font-size:0.9em"><option value="">-- Seleccione --</option></select>
+              <div style="margin-top:6px;display:flex;gap:12px">
+                <label style="font-size:0.8em;cursor:pointer"><input type="checkbox" id="inv-pierde1" checked> Pierde</label>
+                <label style="font-size:0.8em;cursor:pointer"><input type="checkbox" id="inv-gana1" checked> Gana</label>
+              </div>
+            </div>
+            <div style="flex:1;min-width:240px;background:#fef5e7;padding:12px;border-radius:8px;border-left:4px solid #e67e22">
+              <strong style="color:#d35400;font-size:0.9em">🟠 Lado B</strong>
+              <label style="font-size:0.82em;font-weight:600;color:#555;display:block;margin:8px 0 4px">Candidato</label>
+              <select id="inv-cand2" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;font-size:0.9em"><option value="">-- Seleccione --</option></select>
+              <div style="margin-top:6px;display:flex;gap:12px">
+                <label style="font-size:0.8em;cursor:pointer"><input type="checkbox" id="inv-pierde2" checked> Pierde</label>
+                <label style="font-size:0.8em;cursor:pointer"><input type="checkbox" id="inv-gana2" checked> Gana</label>
+              </div>
+            </div>
+          </div>
+          <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+            <button onclick="invBuscar(1)" id="inv-btn-buscar" style="padding:10px 24px;background:linear-gradient(135deg,#1e3a8a,#2563eb);color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:600">⚖️ Comparar</button>
+            <button onclick="invLimpiar()" style="padding:8px 14px;background:#dc3545;color:#fff;border:none;border-radius:5px;cursor:pointer">🧹 Limpiar</button>
+            <span style="margin-left:auto;color:#666;font-size:0.88em" id="inv-info-total"></span>
+          </div>
+          <div id="inv-loading" class="loading" style="display:none">Buscando...</div>
+          <div id="inv-comparar-content" style="margin-top:14px;overflow-x:auto"></div>
+          <div id="inv-paginacion" style="display:flex;gap:6px;align-items:center;justify-content:center;flex-wrap:wrap;margin-top:12px"></div>
+        </div>
+
+        <!-- Listado investigaciones -->
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+            <div>
+              <h2 style="margin:0">📋 Investigaciones — Presidencial 2026</h2>
+              <p style="color:#666;font-size:0.85em;margin:4px 0 0">Grupos de mesas con diferencias significativas guardados para análisis.</p>
+            </div>
+            <button onclick="invCargarListado()" style="padding:6px 16px;background:#1e3a8a;color:#fff;border:none;border-radius:5px;cursor:pointer;font-size:0.9em">🔄 Refrescar</button>
+          </div>
+          <div id="inv-listado-loading" class="loading" style="display:none;margin-top:10px">Cargando...</div>
+          <div id="inv-listado-content" style="margin-top:14px"><p style="color:#aaa;font-style:italic">Sin investigaciones todavía.</p></div>
+        </div>
+      </div>
+      <div id="mod-evidencias" class="module"><div class="card"><h2>📎 Evidencias</h2><div class="placeholder">Por hacer.</div></div></div>
+    </main>
+  </div>
+</div>
+
+<script>
+const BASE_PATH = ''; // ajustar si se monta en subpath de nginx
+let sesionUsuario = null;
+
+async function fetchJSON(url, opts) {
+  const res = await fetch(BASE_PATH + url, opts);
+  const j = await res.json().catch(() => ({}));
+  return { ok: res.ok, status: res.status, data: j };
+}
+
+async function doLogin() {
+  const cedula = document.getElementById('login-cedula').value.trim();
+  const contrasena = document.getElementById('login-password').value;
+  const btn = document.getElementById('login-btn');
+  const err = document.getElementById('login-error');
+  err.style.display = 'none';
+  btn.disabled = true; btn.textContent = 'Verificando...';
+  const r = await fetchJSON('/api/login', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ cedula, contrasena })
+  });
+  btn.disabled = false; btn.textContent = 'Ingresar';
+  if (r.data.success) {
+    sesionUsuario = r.data.data;
+    mostrarApp();
+  } else {
+    err.textContent = r.data.error || 'No se pudo iniciar sesión';
+    err.style.display = 'block';
+  }
+}
+
+async function doLogout() {
+  await fetchJSON('/api/logout', { method: 'POST' });
+  sesionUsuario = null;
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('login-screen').style.display = 'flex';
+  document.getElementById('login-cedula').value = '';
+  document.getElementById('login-password').value = '';
+}
+
+function mostrarApp() {
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+  document.getElementById('user-display').textContent =
+    `${sesionUsuario.nombres || ''} ${sesionUsuario.apellidos || ''} (${sesionUsuario.perfil || '-'})`;
+}
+
+function cambiarModulo(modId, linkEl) {
+  document.querySelectorAll('.module').forEach(m => m.classList.remove('active'));
+  document.getElementById(modId).classList.add('active');
+  document.querySelectorAll('.sidebar a').forEach(a => a.classList.remove('active'));
+  if (linkEl) linkEl.classList.add('active');
+}
+
+// ===================== MÓDULO DIVIPOL (mismo patrón Congreso) =====================
+let divipolInicializado = false;
+
+function fmt(n) {
+  if (n == null) return '—';
+  return Number(n).toLocaleString('es-CO');
+}
+
+async function divipolInit() {
+  if (divipolInicializado) return;
+  divipolInicializado = true;
+  await divipolCargarResumen();
+  await cargarFiltrosDivipol();
+}
+
+async function divipolCargarResumen() {
+  const r = await fetchJSON('/api/divipol/resumen');
+  if (!r.data.success) return;
+  const d = r.data.data;
+  const cont = document.getElementById('divipol-resumen');
+  const card = (label, val, color) =>
+    `<div style="flex:1;min-width:130px;background:${color};color:#fff;padding:12px 14px;border-radius:8px">
+       <div style="font-size:11px;opacity:0.85;letter-spacing:0.5px;text-transform:uppercase">${label}</div>
+       <div style="font-size:22px;font-weight:700;margin-top:4px">${fmt(val)}</div>
+     </div>`;
+  cont.innerHTML =
+    card('Departamentos', d.deptos,  '#1e3a8a') +
+    card('Municipios',    d.municipios, '#2563eb') +
+    card('Zonas',         d.zonas,     '#0891b2') +
+    card('Puestos',       d.puestos,   '#0d9488') +
+    card('Mesas',         d.mesas,     '#16a34a') +
+    card('Potencial',     d.potencial, '#9333ea');
+}
+
+function limpiarFiltrosDivipol() {
+  document.getElementById('filtro-divipol-depto').value = '';
+  const selectMpio = document.getElementById('filtro-divipol-mpio');
+  selectMpio.innerHTML = '<option value="">-- Todos --</option>';
+  selectMpio.disabled = true;
+  const selectZona = document.getElementById('filtro-divipol-zona');
+  selectZona.innerHTML = '<option value="">-- Todas --</option>';
+  selectZona.disabled = true;
+  cargarDivipol();
+}
+
+async function cargarFiltrosDivipol() {
+  try {
+    const r = await fetchJSON('/api/divipol/departamentos');
+    const select = document.getElementById('filtro-divipol-depto');
+    select.innerHTML = '<option value="">-- Todos --</option>';
+    if (r.data.success) {
+      r.data.data.forEach(d => {
+        select.innerHTML += `<option value="${d.coddepto}">${d.nomdepto}</option>`;
+      });
+    }
+  } catch (e) { console.error(e); }
+  cargarDivipol();
+}
+
+async function onDivipolDeptoChange() {
+  const coddepto = document.getElementById('filtro-divipol-depto').value;
+  const selectMpio = document.getElementById('filtro-divipol-mpio');
+  const selectZona = document.getElementById('filtro-divipol-zona');
+  selectMpio.innerHTML = '<option value="">-- Todos --</option>';
+  selectZona.innerHTML = '<option value="">-- Todas --</option>';
+  selectMpio.disabled = true;
+  selectZona.disabled = true;
+  if (coddepto) {
+    const r = await fetchJSON(`/api/divipol/municipios?coddepto=${coddepto}`);
+    if (r.data.success) {
+      r.data.data.forEach(m => {
+        selectMpio.innerHTML += `<option value="${m.codmipio}">${m.nommipio || '—'}</option>`;
+      });
+      selectMpio.disabled = false;
+    }
+  }
+  cargarDivipol();
+}
+
+async function onDivipolMpioChange() {
+  const coddepto = document.getElementById('filtro-divipol-depto').value;
+  const codmipio = document.getElementById('filtro-divipol-mpio').value;
+  const selectZona = document.getElementById('filtro-divipol-zona');
+  selectZona.innerHTML = '<option value="">-- Todas --</option>';
+  selectZona.disabled = true;
+  if (codmipio) {
+    const r = await fetchJSON(`/api/divipol/zonas?coddepto=${coddepto}&codmipio=${codmipio}`);
+    if (r.data.success) {
+      r.data.data.forEach(z => {
+        selectZona.innerHTML += `<option value="${z.codzona}">Zona ${z.codzona}</option>`;
+      });
+      selectZona.disabled = false;
+    }
+  }
+  cargarDivipol();
+}
+
+async function onDivipolZonaChange() {
+  cargarDivipol();
+}
+
+async function cargarDivipol() {
+  const loading = document.getElementById('divipol-loading');
+  const content = document.getElementById('divipol-content');
+  loading.style.display = 'block';
+  content.innerHTML = '';
+
+  const coddepto = document.getElementById('filtro-divipol-depto')?.value || '';
+  const codmipio = document.getElementById('filtro-divipol-mpio')?.value || '';
+  const codzona  = document.getElementById('filtro-divipol-zona')?.value || '';
+
+  const params = [];
+  if (coddepto) params.push(`coddepto=${coddepto}`);
+  if (codmipio) params.push(`codmipio=${codmipio}`);
+  if (codzona)  params.push(`codzona=${codzona}`);
+  const url = '/api/divipol' + (params.length ? '?' + params.join('&') : '');
+
+  let columnasOrden;
+  if (codzona) {
+    columnasOrden = [
+      { key: 'codpuesto', label: 'Cód. Puesto' },
+      { key: 'nompuesto', label: 'Puesto' },
+      { key: 'hombre', label: 'Hombres' },
+      { key: 'mujeres', label: 'Mujeres' },
+      { key: 'total_potencial', label: 'Total Potencial' },
+      { key: 'mesas', label: 'Mesas' }
+    ];
+  } else if (codmipio) {
+    columnasOrden = [
+      { key: 'codzona', label: 'Zona' },
+      { key: 'hombre', label: 'Hombres' },
+      { key: 'mujeres', label: 'Mujeres' },
+      { key: 'total_potencial', label: 'Total Potencial' },
+      { key: 'mesas', label: 'Mesas' }
+    ];
+  } else if (coddepto) {
+    columnasOrden = [
+      { key: 'codmipio', label: 'Cód. Municipio' },
+      { key: 'nommipio', label: 'Municipio' },
+      { key: 'hombre', label: 'Hombres' },
+      { key: 'mujeres', label: 'Mujeres' },
+      { key: 'total_potencial', label: 'Total Potencial' },
+      { key: 'mesas', label: 'Mesas' }
+    ];
+  } else {
+    columnasOrden = [
+      { key: 'coddepto', label: 'Cód. Depto' },
+      { key: 'nomdepto', label: 'Departamento' },
+      { key: 'hombre', label: 'Hombres' },
+      { key: 'mujeres', label: 'Mujeres' },
+      { key: 'total_potencial', label: 'Total Potencial' },
+      { key: 'mesas', label: 'Mesas' }
+    ];
+  }
+
+  const colTotales = ['hombre', 'mujeres', 'total_potencial', 'mesas'];
+
+  try {
+    const response = await fetch(url);
+    const result = await response.json();
+    if (result.success && result.data.length > 0) {
+      let html = '<div style="overflow-x:auto"><table><thead><tr>';
+      columnasOrden.forEach(col => html += `<th>${col.label}</th>`);
+      html += '</tr></thead><tbody>';
+      const totales = {};
+      colTotales.forEach(k => totales[k] = 0);
+      result.data.forEach(row => {
+        html += '<tr>';
+        columnasOrden.forEach(col => {
+          const val = row[col.key] !== null && row[col.key] !== undefined ? row[col.key] : '';
+          const isNum = typeof val === 'number';
+          if (isNum && colTotales.includes(col.key)) totales[col.key] += val;
+          html += `<td class="${isNum ? 'number' : ''}">${isNum ? val.toLocaleString('es-CO') : val}</td>`;
+        });
+        html += '</tr>';
+      });
+      html += '</tbody><tfoot><tr style="background:linear-gradient(135deg,#1e3a8a,#2563eb);color:#fff;font-weight:bold">';
+      columnasOrden.forEach((col, i) => {
+        if (colTotales.includes(col.key)) {
+          html += `<td class="number">${totales[col.key].toLocaleString('es-CO')}</td>`;
+        } else if (i === 0) {
+          html += '<td></td>';
+        } else {
+          html += '<td>TOTAL</td>';
+        }
+      });
+      html += '</tr></tfoot></table></div>';
+      html += `<p style="color:#666;margin-top:10px">Total registros: ${result.data.length}</p>`;
+      content.innerHTML = html;
+    } else {
+      content.innerHTML = '<p style="color:#666">No se encontraron datos.</p>';
+    }
+  } catch (error) {
+    content.innerHTML = `<div class="error">Error al cargar datos: ${error.message}</div>`;
+  } finally {
+    loading.style.display = 'none';
+  }
+}
+
+// ===================== MÓDULO MMV PRECONTEO =====================
+let mmvArchivoActual = null;
+let mmvLineasArchivo = 0;
+let mmvArchivosMasivo = [];
+
+function mmvFormatearTamaño(b) {
+  if (b < 1024) return b + ' B';
+  if (b < 1048576) return (b/1024).toFixed(1) + ' KB';
+  return (b/1048576).toFixed(2) + ' MB';
+}
+
+async function mmvContarLineas(file) {
+  const txt = await file.text();
+  const total = txt.split('\n').filter(l => l.trim()).length;
+  return total;
+}
+
+async function mmvArchivoSeleccionado() {
+  const inp = document.getElementById('mmv-input-archivo');
+  if (!inp.files.length) return;
+  const f = inp.files[0];
+  mmvArchivoActual = f;
+  mmvLineasArchivo = await mmvContarLineas(f);
+  document.getElementById('mmv-info-nombre').textContent = '📄 ' + f.name;
+  mmvRecalcular();
+  document.getElementById('mmv-info-archivo').style.display = 'block';
+  document.getElementById('mmv-resultado').style.display = 'none';
+  document.getElementById('mmv-conf-reemplazo').style.display = 'none';
+}
+
+function mmvRecalcular() {
+  const tieneEncab = document.getElementById('mmv-check-encabezado').checked;
+  const regs = Math.max(0, mmvLineasArchivo - (tieneEncab ? 1 : 0));
+  const f = mmvArchivoActual;
+  if (!f) return;
+  document.getElementById('mmv-info-detalle').textContent =
+    `${mmvFormatearTamaño(f.size)} · ${regs.toLocaleString('es-CO')} registros (sin encabezado)`;
+}
+
+function mmvCancelar() {
+  mmvArchivoActual = null;
+  document.getElementById('mmv-input-archivo').value = '';
+  document.getElementById('mmv-info-archivo').style.display = 'none';
+  document.getElementById('mmv-conf-reemplazo').style.display = 'none';
+  document.getElementById('mmv-resultado').style.display = 'none';
+}
+
+function mmvMostrarResultado(ok, msg) {
+  const div = document.getElementById('mmv-resultado');
+  div.style.display = 'block';
+  if (ok) {
+    div.style.background = '#dcfce7';
+    div.style.color = '#166534';
+    div.style.borderLeft = '3px solid #16a34a';
+  } else {
+    div.style.background = '#fef2f2';
+    div.style.color = '#991b1b';
+    div.style.borderLeft = '3px solid #ef4444';
+  }
+  div.textContent = msg;
+}
+
+async function mmvEnviar() {
+  const f = mmvArchivoActual;
+  if (!f) return;
+  const tieneEncab = document.getElementById('mmv-check-encabezado').checked;
+
+  // Verificar si ya existe (bloquear si sí)
+  const rChk = await fetchJSON('/api/mmv-preconteo/verificar', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({nombrearchivo: f.name})
+  });
+  if (rChk.data.success && rChk.data.existe) {
+    const ex = rChk.data.data;
+    mmvMostrarResultado(false,
+      `❌ El archivo "${f.name}" ya fue cargado el ${ex.fecha} (${ex.registros} registros). No se permite cargarlo nuevamente. Si necesita reemplazarlo, elimínelo primero desde el Historial.`);
+    return;
+  }
+
+  const btn = document.getElementById('mmv-btn-cargar');
+  btn.disabled = true; btn.textContent = 'Cargando...';
+  try {
+    const fd = new FormData();
+    fd.append('archivo', f);
+    fd.append('tiene_encabezado', tieneEncab ? 'true' : 'false');
+    const res = await fetch(BASE_PATH + '/api/mmv-preconteo/cargar', { method:'POST', body: fd });
+    const j = await res.json();
+    if (j.success) {
+      mmvMostrarResultado(true, `✅ ${j.message}`);
+      mmvCancelar();
+      mmvCargarHistorial();
+    } else {
+      mmvMostrarResultado(false, '❌ ' + (j.error || 'Error en carga'));
+    }
+  } catch(e) {
+    mmvMostrarResultado(false, '❌ Error: ' + e.message);
+  } finally {
+    btn.disabled = false; btn.textContent = 'Cargar';
+  }
+}
+
+// --- Carga masiva ---
+async function mmvMasivoSeleccionado() {
+  const files = Array.from(document.getElementById('mmv-input-masivo').files);
+  if (!files.length) return;
+  mmvArchivosMasivo = files.map(f => ({file: f, estado: 'pendiente', mensaje: ''}));
+  document.getElementById('mmv-titulo-masivo').textContent = `${files.length} archivo(s) seleccionado(s)`;
+  mmvRenderTablaMasivo();
+  document.getElementById('mmv-lista-masivo').style.display = 'block';
+}
+
+function mmvRenderTablaMasivo() {
+  let html = '<table style="font-size:13px"><thead><tr><th>#</th><th>Archivo</th><th>Tamaño</th><th>Estado</th><th>Mensaje</th></tr></thead><tbody>';
+  mmvArchivosMasivo.forEach((it, i) => {
+    const color = it.estado==='ok'?'#16a34a':it.estado==='error'?'#dc3545':it.estado==='cargando'?'#f59e0b':it.estado==='omitido'?'#94a3b8':'#6b7280';
+    const ico   = it.estado==='ok'?'✅':it.estado==='error'?'❌':it.estado==='cargando'?'⏳':it.estado==='omitido'?'⏭':'⏸';
+    html += `<tr>
+      <td>${i+1}</td>
+      <td>${it.file.name}</td>
+      <td class="number">${mmvFormatearTamaño(it.file.size)}</td>
+      <td style="color:${color};font-weight:600">${ico} ${it.estado}</td>
+      <td>${it.mensaje||''}</td>
+    </tr>`;
+  });
+  html += '</tbody></table>';
+  document.getElementById('mmv-tabla-masivo').innerHTML = html;
+}
+
+function mmvCancelarMasivo() {
+  mmvArchivosMasivo = [];
+  document.getElementById('mmv-input-masivo').value = '';
+  document.getElementById('mmv-lista-masivo').style.display = 'none';
+}
+
+async function mmvIniciarMasivo() {
+  const tieneEncab = document.getElementById('mmv-check-encab-masivo').checked;
+  const total = mmvArchivosMasivo.length;
+  document.getElementById('mmv-progreso-masivo').style.display = 'block';
+  document.getElementById('mmv-btn-masivo').disabled = true;
+
+  let nOk=0, nSkip=0, nErr=0;
+  for (let i = 0; i < total; i++) {
+    const it = mmvArchivosMasivo[i];
+    it.estado = 'cargando';
+    mmvRenderTablaMasivo();
+    try {
+      const fd = new FormData();
+      fd.append('archivo', it.file);
+      fd.append('tiene_encabezado', tieneEncab ? 'true' : 'false');
+      const res = await fetch(BASE_PATH + '/api/mmv-preconteo/cargar', { method:'POST', body: fd });
+      const j = await res.json();
+      if (j.success) {
+        it.estado = 'ok'; it.mensaje = `${j.data.registros} reg. → PROCESADO/${j.data.depto}/`;
+        nOk++;
+      } else if (j.duplicado) {
+        it.estado = 'omitido'; it.mensaje = `Ya cargado el ${j.data.fecha} (saltado)`;
+        nSkip++;
+      } else {
+        it.estado = 'error'; it.mensaje = j.error;
+        nErr++;
+      }
+    } catch(e) {
+      it.estado = 'error'; it.mensaje = e.message;
+      nErr++;
+    }
+    const pct = Math.round((i+1)/total*100);
+    document.getElementById('mmv-progreso-pct').textContent = pct + '%';
+    document.getElementById('mmv-progreso-texto').textContent = `Procesando ${i+1} de ${total}...`;
+    document.getElementById('mmv-progreso-barra').style.width = pct + '%';
+    mmvRenderTablaMasivo();
+  }
+  document.getElementById('mmv-progreso-texto').textContent =
+    `Completado: ${nOk} cargado(s), ${nSkip} omitido(s) (ya cargados), ${nErr} con error.`;
+  document.getElementById('mmv-btn-masivo').disabled = false;
+  mmvCargarHistorial();
+}
+
+// --- Historial con pestañas + filtros + paginación ---
+let mmvHistorialData = [];
+let mmvTabActiva = 'pendientes';
+let mmvPaginaActual = 1;
+let mmvDeptoMap = null;  // { "01": "ANTIOQUIA", ... }
+
+async function mmvCargarMapaDeptos() {
+  if (mmvDeptoMap) return;
+  const r = await fetchJSON('/api/divipol/departamentos');
+  if (r.data.success) {
+    mmvDeptoMap = {};
+    r.data.data.forEach(d => {
+      mmvDeptoMap[String(d.coddepto).padStart(2, '0')] = d.nomdepto || '';
+    });
+  } else {
+    mmvDeptoMap = {};
+  }
+}
+
+function mmvDeptoLabel(cod) {
+  if (!cod || cod === '—') return '—';
+  const nom = mmvDeptoMap && mmvDeptoMap[cod];
+  return nom ? `${cod} - ${nom}` : cod;
+}
+
+async function mmvCargarHistorial() {
+  const cont = document.getElementById('mmv-historial-content');
+  if (!cont) return;
+  document.getElementById('mmv-historial-loading').style.display = 'block';
+  cont.innerHTML = '';
+  // Asegurar mapa de deptos cargado
+  await mmvCargarMapaDeptos();
+  const r = await fetchJSON('/api/mmv-preconteo/historial');
+  document.getElementById('mmv-historial-loading').style.display = 'none';
+  if (!r.data.success) {
+    cont.innerHTML = `<div class="error">Error: ${r.data.error}</div>`;
+    return;
+  }
+  mmvHistorialData = r.data.data || [];
+
+  // Poblar select de deptos basado en los nombres de archivo (con nombre)
+  const selDepto = document.getElementById('mmv-filtro-depto');
+  const valActual = selDepto.value;
+  const deptos = new Set();
+  mmvHistorialData.forEach(row => {
+    const m = (row.nombrearchivo || '').match(/_(\d{2})_/);
+    if (m) deptos.add(m[1]);
+  });
+  selDepto.innerHTML = '<option value="">Todos</option>';
+  Array.from(deptos).sort().forEach(d => {
+    selDepto.innerHTML += `<option value="${d}"${d===valActual?' selected':''}>${mmvDeptoLabel(d)}</option>`;
+  });
+
+  // Contadores por tab
+  document.getElementById('mmv-count-pendientes').textContent =
+    mmvHistorialData.filter(r => r.estado === 0).length;
+  document.getElementById('mmv-count-procesados').textContent =
+    mmvHistorialData.filter(r => r.estado === 1).length;
+
+  mmvRefrescarRender();
+}
+
+function mmvCambiarTab(tab) {
+  mmvTabActiva = tab;
+  mmvPaginaActual = 1;
+  const tabs = ['pendientes', 'procesados'];
+  const colors = { pendientes: '#f59e0b', procesados: '#16a34a' };
+  tabs.forEach(t => {
+    const el = document.getElementById('mmv-tab-' + t);
+    if (t === tab) {
+      el.style.borderBottomColor = colors[t];
+      el.style.color = colors[t];
+      el.style.fontWeight = '700';
+    } else {
+      el.style.borderBottomColor = 'transparent';
+      el.style.color = '#94a3b8';
+      el.style.fontWeight = '600';
+    }
+  });
+  mmvRefrescarRender();
+}
+
+function mmvLimpiarFiltros() {
+  document.getElementById('mmv-filtro-nombre').value = '';
+  document.getElementById('mmv-filtro-depto').value = '';
+  mmvPaginaActual = 1;
+  mmvRefrescarRender();
+}
+
+function mmvCambiarPagina(p) {
+  mmvPaginaActual = p;
+  mmvRefrescarRender();
+}
+
+function mmvFiltrar(data) {
+  const txt = (document.getElementById('mmv-filtro-nombre').value || '').toLowerCase().trim();
+  const dep = document.getElementById('mmv-filtro-depto').value || '';
+  return data.filter(r => {
+    if (mmvTabActiva === 'pendientes' && r.estado !== 0) return false;
+    if (mmvTabActiva === 'procesados' && r.estado !== 1) return false;
+    const nom = (r.nombrearchivo || '').toLowerCase();
+    if (txt && !nom.includes(txt)) return false;
+    if (dep) {
+      const m = (r.nombrearchivo || '').match(/_(\d{2})_/);
+      if (!m || m[1] !== dep) return false;
+    }
+    return true;
+  });
+}
+
+function mmvRefrescarRender() {
+  const cont = document.getElementById('mmv-historial-content');
+  if (!cont) return;
+  if (!mmvHistorialData.length) {
+    cont.innerHTML = '<p style="color:#666">No hay archivos cargados todavía.</p>';
+    document.getElementById('mmv-paginacion').innerHTML = '';
+    mmvActualizarSeleccion();
+    return;
+  }
+  const filtrado = mmvFiltrar(mmvHistorialData);
+  const pagSize = parseInt(document.getElementById('mmv-pagsize').value);
+  const totalPaginas = Math.max(1, Math.ceil(filtrado.length / pagSize));
+  if (mmvPaginaActual > totalPaginas) mmvPaginaActual = 1;
+  const start = (mmvPaginaActual - 1) * pagSize;
+  const slice = filtrado.slice(start, start + pagSize);
+
+  // Totales del FILTRADO (no solo de la página)
+  const totalReg = filtrado.reduce((s, r) => s + (r.registros || 0), 0);
+
+  if (!slice.length) {
+    cont.innerHTML = `<p style="color:#666">No hay archivos en esta pestaña con los filtros actuales.</p>
+      <p style="color:#94a3b8;font-size:0.85em">Filas filtradas: 0 de ${mmvHistorialData.length} totales.</p>`;
+    document.getElementById('mmv-paginacion').innerHTML = '';
+    mmvActualizarSeleccion();
+    return;
+  }
+
+  let html = '<table><thead><tr>' +
+    '<th style="width:30px"><input type="checkbox" id="mmv-chk-all" onchange="mmvToggleTodos(this.checked)"></th>' +
+    '<th>#</th><th>Archivo</th><th>Depto</th><th>Fecha</th><th class="number">Registros</th>' +
+    '<th>Estado</th><th>Usuario</th><th>Acciones</th></tr></thead><tbody>';
+  slice.forEach((row, i) => {
+    const num = start + i + 1;
+    const m = (row.nombrearchivo || '').match(/_(\d{2})_/);
+    const depto = m ? mmvDeptoLabel(m[1]) : '—';
+    const estadoTxt = row.estado === 0
+      ? '<span style="color:#f59e0b;font-weight:600">⏳ Pendiente</span>'
+      : '<span style="color:#16a34a;font-weight:600">✅ Procesado</span>';
+    const esc = row.nombrearchivo.replace(/"/g, '&quot;');
+    html += `<tr>
+      <td style="text-align:center"><input type="checkbox" class="mmv-row-chk" data-nombre="${esc}" onchange="mmvActualizarSeleccion()"></td>
+      <td>${num}</td>
+      <td>${row.nombrearchivo}</td>
+      <td style="text-align:center">${depto}</td>
+      <td>${row.fecha}</td>
+      <td class="number">${(row.registros||0).toLocaleString('es-CO')}</td>
+      <td>${estadoTxt}</td>
+      <td>${row.usuario || '—'}</td>
+      <td style="white-space:nowrap">
+        ${row.estado === 0 ? `<button onclick="mmvProcesar('${row.nombrearchivo.replace(/'/g,"\\'")}')"
+            style="padding:4px 10px;background:#16a34a;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px;margin-right:4px" title="Procesar">⚙️</button>` : ''}
+        <button onclick="mmvEliminar('${row.nombrearchivo.replace(/'/g,"\\'")}')"
+            style="padding:4px 10px;background:#dc3545;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px" title="Eliminar">🗑</button>
+      </td>
+    </tr>`;
+  });
+  // TOTAL (sobre el filtrado completo, no la página)
+  html += `</tbody><tfoot>
+    <tr style="background:linear-gradient(135deg,#1e3a8a,#2563eb);color:#fff;font-weight:bold">
+      <td></td><td></td>
+      <td colspan="3">TOTAL filtrado: ${filtrado.length} archivo(s)</td>
+      <td class="number">${totalReg.toLocaleString('es-CO')}</td>
+      <td colspan="3"></td>
+    </tr>
+  </tfoot></table>`;
+  html += `<p style="color:#666;margin-top:8px;font-size:0.88em">
+    Mostrando ${slice.length} de ${filtrado.length} archivo(s) filtrados (de ${mmvHistorialData.length} totales).
+  </p>`;
+  cont.innerHTML = html;
+
+  // Paginación
+  const pagDiv = document.getElementById('mmv-paginacion');
+  if (totalPaginas > 1) {
+    let pg = '';
+    const btnStyle = (active) =>
+      `padding:6px 12px;background:${active?'#1e3a8a':'#fff'};color:${active?'#fff':'#1e3a8a'};border:1px solid #1e3a8a;border-radius:4px;cursor:pointer;font-size:13px;font-weight:600`;
+    pg += `<button onclick="mmvCambiarPagina(1)" ${mmvPaginaActual===1?'disabled':''} style="${btnStyle(false)};${mmvPaginaActual===1?'opacity:0.4;cursor:not-allowed':''}">«</button>`;
+    pg += `<button onclick="mmvCambiarPagina(${mmvPaginaActual-1})" ${mmvPaginaActual===1?'disabled':''} style="${btnStyle(false)};${mmvPaginaActual===1?'opacity:0.4;cursor:not-allowed':''}">‹</button>`;
+    const desde = Math.max(1, mmvPaginaActual - 4);
+    const hasta = Math.min(totalPaginas, desde + 9);
+    for (let p = desde; p <= hasta; p++) {
+      pg += `<button onclick="mmvCambiarPagina(${p})" style="${btnStyle(p===mmvPaginaActual)}">${p}</button>`;
+    }
+    pg += `<button onclick="mmvCambiarPagina(${mmvPaginaActual+1})" ${mmvPaginaActual===totalPaginas?'disabled':''} style="${btnStyle(false)};${mmvPaginaActual===totalPaginas?'opacity:0.4;cursor:not-allowed':''}">›</button>`;
+    pg += `<button onclick="mmvCambiarPagina(${totalPaginas})" ${mmvPaginaActual===totalPaginas?'disabled':''} style="${btnStyle(false)};${mmvPaginaActual===totalPaginas?'opacity:0.4;cursor:not-allowed':''}">»</button>`;
+    pg += `<span style="margin-left:10px;color:#666;font-size:13px">Página ${mmvPaginaActual} de ${totalPaginas}</span>`;
+    pagDiv.innerHTML = pg;
+  } else {
+    pagDiv.innerHTML = '';
+  }
+
+  mmvActualizarSeleccion();
+}
+
+function mmvToggleTodos(checked) {
+  document.querySelectorAll('.mmv-row-chk').forEach(c => c.checked = checked);
+  mmvActualizarSeleccion();
+}
+
+function mmvActualizarSeleccion() {
+  const chks = document.querySelectorAll('.mmv-row-chk:checked');
+  const n = chks.length;
+  const btn = document.getElementById('mmv-btn-eliminar-sel');
+  document.getElementById('mmv-count-sel').textContent = n;
+  btn.style.display = n > 0 ? 'inline-block' : 'none';
+  // Sync header checkbox
+  const all = document.querySelectorAll('.mmv-row-chk');
+  const chkAll = document.getElementById('mmv-chk-all');
+  if (chkAll) {
+    chkAll.checked = n > 0 && n === all.length;
+    chkAll.indeterminate = n > 0 && n < all.length;
+  }
+}
+
+async function mmvEliminarSeleccionados() {
+  const chks = Array.from(document.querySelectorAll('.mmv-row-chk:checked'));
+  const archivos = chks.map(c => c.dataset.nombre);
+  if (!archivos.length) return;
+  if (!confirm(`¿Eliminar ${archivos.length} archivo(s) y todos sus datos?`)) return;
+  const btn = document.getElementById('mmv-btn-eliminar-sel');
+  btn.disabled = true; btn.textContent = 'Eliminando...';
+  try {
+    const res = await fetch(BASE_PATH + '/api/mmv-preconteo/eliminar-batch', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ archivos })
+    });
+    const j = await res.json();
+    if (j.success) {
+      alert(`✅ ${j.message}` + (j.errores && j.errores.length ? '\n\nErrores:\n' + j.errores.join('\n') : ''));
+      mmvCargarHistorial();
+    } else {
+      alert('Error: ' + j.error);
+    }
+  } catch(e) {
+    alert('Error: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    document.getElementById('mmv-count-sel').textContent = '0';
+  }
+}
+
+async function mmvProcesar(nombre) {
+  if (!confirm(`¿Procesar "${nombre}"? Parsea las líneas raw y mete los datos en preconteo_presidencial_2026.`)) return;
+  const res = await fetch(BASE_PATH + '/api/mmv-preconteo/procesar/' + encodeURIComponent(nombre), { method:'POST' });
+  const j = await res.json();
+  if (j.success) {
+    alert(`✅ ${j.message}\n\nLíneas raw: ${j.data.lineas_raw.toLocaleString('es-CO')}\nLíneas válidas: ${j.data.lineas_validas.toLocaleString('es-CO')}\nLíneas inválidas: ${j.data.lineas_invalidas}`);
+    mmvCargarHistorial();
+  } else {
+    alert('Error: ' + j.error);
+  }
+}
+
+async function mmvProcesarTodos() {
+  if (!confirm('¿Procesar TODOS los archivos pendientes? Puede tardar varios minutos según el volumen.')) return;
+  const btn = event.target;
+  btn.disabled = true; btn.textContent = '⏳ Procesando...';
+  try {
+    const res = await fetch(BASE_PATH + '/api/mmv-preconteo/procesar-todos', { method:'POST' });
+    const j = await res.json();
+    if (j.success) {
+      alert(`✅ ${j.message}` + (j.errores && j.errores.length ? '\n\nErrores:\n' + j.errores.slice(0,5).join('\n') : ''));
+      mmvCargarHistorial();
+    } else {
+      alert('Error: ' + j.error);
+    }
+  } catch(e) {
+    alert('Error: ' + e.message);
+  } finally {
+    btn.disabled = false; btn.textContent = '⚙️ Procesar todos los pendientes';
+  }
+}
+
+async function mmvEliminar(nombre) {
+  if (!confirm(`¿Eliminar el archivo "${nombre}" y todos sus datos?`)) return;
+  const res = await fetch(BASE_PATH + '/api/mmv-preconteo/' + encodeURIComponent(nombre), { method:'DELETE' });
+  const j = await res.json();
+  if (j.success) {
+    mmvCargarHistorial();
+  } else {
+    alert('Error: ' + j.error);
+  }
+}
+
+// ===================== MÓDULO CONSULTA VOTACIÓN PRECONTEO =====================
+let cprInit_done = false;
+
+async function cprInit() {
+  if (cprInit_done) return;
+  cprInit_done = true;
+  // Cargar deptos
+  const rd = await fetchJSON('/api/consulta-preconteo/filtros/departamentos');
+  const sd = document.getElementById('cpr-depto');
+  if (rd.data.success) {
+    rd.data.data.forEach(d => {
+      sd.innerHTML += `<option value="${d.coddepto}">${d.coddepto} - ${d.nomdepto}</option>`;
+    });
+  }
+  // Cargar candidatos
+  const rc = await fetchJSON('/api/consulta-preconteo/filtros/candidatos');
+  const sc = document.getElementById('cpr-candidato');
+  if (rc.data.success) {
+    rc.data.data.forEach(c => {
+      const label = `${c.codcandidato} - ${c.nomcandidato}`;
+      sc.innerHTML += `<option value="${c.codcandidato}">${label}</option>`;
+    });
+  }
+}
+
+async function cprOnDeptoChange() {
+  const cd = document.getElementById('cpr-depto').value;
+  const sm = document.getElementById('cpr-mpio');
+  const sz = document.getElementById('cpr-zona');
+  const sp = document.getElementById('cpr-puesto');
+  sm.innerHTML = '<option value="">Todos</option>'; sm.disabled = true;
+  sz.innerHTML = '<option value="">Todas</option>'; sz.disabled = true;
+  sp.innerHTML = '<option value="">Todos</option>'; sp.disabled = true;
+  if (!cd) return;
+  const r = await fetchJSON(`/api/consulta-preconteo/filtros/municipios?coddepto=${cd}`);
+  if (r.data.success) {
+    r.data.data.forEach(m => {
+      sm.innerHTML += `<option value="${m.codmipio}">${m.codmipio} - ${m.nommipio || '—'}</option>`;
+    });
+    sm.disabled = false;
+  }
+}
+
+async function cprOnMpioChange() {
+  const cd = document.getElementById('cpr-depto').value;
+  const cm = document.getElementById('cpr-mpio').value;
+  const sz = document.getElementById('cpr-zona');
+  const sp = document.getElementById('cpr-puesto');
+  sz.innerHTML = '<option value="">Todas</option>'; sz.disabled = true;
+  sp.innerHTML = '<option value="">Todos</option>'; sp.disabled = true;
+  if (!cm) return;
+  const r = await fetchJSON(`/api/consulta-preconteo/filtros/zonas?coddepto=${cd}&codmipio=${cm}`);
+  if (r.data.success) {
+    r.data.data.forEach(z => sz.innerHTML += `<option value="${z.codzona}">Zona ${z.codzona}</option>`);
+    sz.disabled = false;
+  }
+  // Habilitar puestos directamente con depto+mpio
+  const rp = await fetchJSON(`/api/consulta-preconteo/filtros/puestos?coddepto=${cd}&codmipio=${cm}`);
+  if (rp.data.success && rp.data.data.length) {
+    rp.data.data.forEach(p => sp.innerHTML += `<option value="${p.codpuesto}">${p.codpuesto} - ${p.nompuesto || '—'}</option>`);
+    sp.disabled = false;
+  }
+}
+
+async function cprOnZonaChange() {
+  const cd = document.getElementById('cpr-depto').value;
+  const cm = document.getElementById('cpr-mpio').value;
+  const cz = document.getElementById('cpr-zona').value;
+  const sp = document.getElementById('cpr-puesto');
+  sp.innerHTML = '<option value="">Todos</option>';
+  if (!cd || !cm) return;
+  const url = cz ? `/api/consulta-preconteo/filtros/puestos?coddepto=${cd}&codmipio=${cm}&codzona=${cz}`
+                 : `/api/consulta-preconteo/filtros/puestos?coddepto=${cd}&codmipio=${cm}`;
+  const r = await fetchJSON(url);
+  if (r.data.success) {
+    r.data.data.forEach(p => sp.innerHTML += `<option value="${p.codpuesto}">${p.codpuesto} - ${p.nompuesto || '—'}</option>`);
+    sp.disabled = false;
+  }
+}
+
+function cprLimpiar() {
+  document.getElementById('cpr-depto').value = '';
+  const sm = document.getElementById('cpr-mpio'); sm.innerHTML = '<option value="">Todos</option>'; sm.disabled = true;
+  const sz = document.getElementById('cpr-zona'); sz.innerHTML = '<option value="">Todas</option>'; sz.disabled = true;
+  const sp = document.getElementById('cpr-puesto'); sp.innerHTML = '<option value="">Todos</option>'; sp.disabled = true;
+  document.getElementById('cpr-candidato').value = '';
+  document.getElementById('cpr-content').innerHTML = '<p style="color:#666;font-style:italic">Seleccione filtros y presione "Buscar".</p>';
+}
+
+async function cprBuscar() {
+  const btn = document.getElementById('cpr-btn-buscar');
+  const loading = document.getElementById('cpr-loading');
+  const content = document.getElementById('cpr-content');
+  btn.disabled = true; btn.textContent = '⏳ Buscando...';
+  loading.style.display = 'block'; content.innerHTML = '';
+  try {
+    const body = {
+      coddepto:     document.getElementById('cpr-depto').value || null,
+      codmipio:     document.getElementById('cpr-mpio').value || null,
+      codzona:      document.getElementById('cpr-zona').value || null,
+      codpuesto:    document.getElementById('cpr-puesto').value || null,
+      codcandidato: document.getElementById('cpr-candidato').value || null,
+    };
+    const res = await fetch(BASE_PATH + '/api/consulta-preconteo/consultar', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(body)
+    });
+    const j = await res.json();
+    if (!j.success) {
+      content.innerHTML = `<div class="error">Error: ${j.error}</div>`;
+      return;
+    }
+    if (!j.data.length) {
+      content.innerHTML = '<p style="color:#666">No se encontraron resultados.</p>';
+      return;
+    }
+    cprRender(j);
+  } catch(e) {
+    content.innerHTML = `<div class="error">Error: ${e.message}</div>`;
+  } finally {
+    btn.disabled = false; btn.textContent = '🔍 Buscar';
+    loading.style.display = 'none';
+  }
+}
+
+function cprRender(resp) {
+  const cont = document.getElementById('cpr-content');
+  const rows = resp.data;
+  const tipo = resp.tipo_resultado;
+
+  let columnas;
+  if (tipo === 'resumen_nacional' || tipo === 'por_departamento' || tipo === 'por_municipio' || tipo === 'candidato_nacional') {
+    columnas = [
+      { key:'codcandidato', label:'Cód.' },
+      { key:'nomcandidato', label:'Candidato' },
+      { key:'nompartido', label:'Partido' },
+      { key:'total_votos', label:'Votos', num:true }
+    ];
+  } else if (tipo === 'por_zona') {
+    columnas = [
+      { key:'codpuesto', label:'Cód. Puesto' },
+      { key:'nompuesto', label:'Puesto' },
+      { key:'codcandidato', label:'Cód.' },
+      { key:'nomcandidato', label:'Candidato' },
+      { key:'total_votos', label:'Votos', num:true }
+    ];
+  } else if (tipo === 'por_puesto_mesas') {
+    columnas = [
+      { key:'mesa', label:'Mesa' },
+      { key:'codcandidato', label:'Cód.' },
+      { key:'nomcandidato', label:'Candidato' },
+      { key:'nompartido', label:'Partido' },
+      { key:'total_votos', label:'Votos', num:true }
+    ];
+  } else {
+    columnas = [
+      { key:'coddepto', label:'Depto' },
+      { key:'codmipio', label:'Mpio' },
+      { key:'codzona', label:'Zona' },
+      { key:'codpuesto', label:'Puesto' },
+      { key:'mesa', label:'Mesa' },
+      { key:'codcandidato', label:'Cód.' },
+      { key:'nomcandidato', label:'Candidato' },
+      { key:'total_votos', label:'Votos', num:true }
+    ];
+  }
+
+  let html = '<table><thead><tr>';
+  columnas.forEach(c => html += `<th class="${c.num?'number':''}">${c.label}</th>`);
+  html += '</tr></thead><tbody>';
+
+  let totalVotos = 0;
+  rows.forEach(r => {
+    html += '<tr>';
+    columnas.forEach(c => {
+      const v = r[c.key];
+      if (c.num) {
+        const n = Number(v) || 0;
+        totalVotos += n;
+        html += `<td class="number">${n.toLocaleString('es-CO')}</td>`;
+      } else {
+        html += `<td>${v != null ? v : '—'}</td>`;
+      }
+    });
+    html += '</tr>';
+  });
+
+  html += '</tbody><tfoot><tr style="background:linear-gradient(135deg,#1e3a8a,#2563eb);color:#fff;font-weight:bold">';
+  columnas.forEach((c, i) => {
+    if (c.num) html += `<td class="number">${totalVotos.toLocaleString('es-CO')}</td>`;
+    else if (i === 0) html += '<td></td>';
+    else if (i === columnas.length - 2) html += '<td>TOTAL</td>';
+    else html += '<td></td>';
+  });
+  html += '</tr></tfoot></table>';
+  html += `<p style="color:#666;margin-top:8px">Total registros: ${rows.length} | Tipo: ${tipo}</p>`;
+  cont.innerHTML = html;
+}
+
+// ===================== MÓDULO INVESTIGACIONES =====================
+let invInit_done = false;
+let invComparData = null;
+let invPaginaActual = 1;
+
+async function invInit() {
+  if (invInit_done) return;
+  invInit_done = true;
+  // Días procesados
+  const rd = await fetchJSON('/api/escrutinio/dias-procesados');
+  const selDia = document.getElementById('inv-dia');
+  if (rd.data.success) {
+    rd.data.data.forEach(d => selDia.innerHTML += `<option value="${d.numdia}">Día ${d.numdia} (${d.facceso})</option>`);
+  }
+  // Deptos
+  const rdep = await fetchJSON('/api/consulta-escrutinio/filtros/departamentos');
+  const sd = document.getElementById('inv-depto');
+  if (rdep.data.success) rdep.data.data.forEach(d => sd.innerHTML += `<option value="${d.coddepto}">${d.coddepto} - ${d.nomdepto}</option>`);
+  // Candidatos en ambos selects
+  const rc = await fetchJSON('/api/consulta-escrutinio/filtros/candidatos');
+  if (rc.data.success) {
+    ['inv-cand1','inv-cand2'].forEach(id => {
+      const s = document.getElementById(id);
+      rc.data.data.forEach(c => s.innerHTML += `<option value="${c.codcandidato}" data-cp="${c.codpartido}" data-np="${c.nompartido||''}">${c.codcandidato} - ${c.nomcandidato}</option>`);
+    });
+  }
+  invCargarListado();
+}
+
+async function invOnDeptoChange() {
+  const cd = document.getElementById('inv-depto').value;
+  const sm = document.getElementById('inv-mpio');
+  sm.innerHTML = '<option value="">Todos</option>'; sm.disabled = true;
+  if (!cd) return;
+  const r = await fetchJSON(`/api/consulta-escrutinio/filtros/municipios?coddepto=${cd}`);
+  if (r.data.success) {
+    r.data.data.forEach(m => sm.innerHTML += `<option value="${m.codmipio}">${m.codmipio} - ${m.nommipio||'—'}</option>`);
+    sm.disabled = false;
+  }
+}
+
+function invLimpiar() {
+  document.getElementById('inv-dia').value = '';
+  document.getElementById('inv-depto').value = '';
+  const sm = document.getElementById('inv-mpio'); sm.innerHTML='<option value="">Todos</option>'; sm.disabled=true;
+  document.getElementById('inv-cand1').value = '';
+  document.getElementById('inv-cand2').value = '';
+  ['inv-pierde1','inv-gana1','inv-pierde2','inv-gana2'].forEach(id => document.getElementById(id).checked = true);
+  document.getElementById('inv-comparar-content').innerHTML = '';
+  document.getElementById('inv-paginacion').innerHTML = '';
+  document.getElementById('inv-info-total').textContent = '';
+  invComparData = null;
+}
+
+async function invBuscar(pagina) {
+  const c1 = document.getElementById('inv-cand1').value;
+  const c2 = document.getElementById('inv-cand2').value;
+  if (!c1 || !c2) { alert('Seleccione ambos candidatos'); return; }
+  if (c1 === c2) { alert('Los candidatos deben ser distintos'); return; }
+  const sel1 = document.getElementById('inv-cand1').selectedOptions[0];
+  const sel2 = document.getElementById('inv-cand2').selectedOptions[0];
+  invPaginaActual = pagina || 1;
+  const btn = document.getElementById('inv-btn-buscar');
+  btn.disabled = true; btn.textContent = '⏳ Buscando...';
+  document.getElementById('inv-loading').style.display = 'block';
+  document.getElementById('inv-comparar-content').innerHTML = '';
+  try {
+    const body = {
+      codcandidato1: parseInt(c1),
+      codcandidato2: parseInt(c2),
+      coddepto: document.getElementById('inv-depto').value || null,
+      codmipio: document.getElementById('inv-mpio').value || null,
+      numdia: document.getElementById('inv-dia').value || null,
+      solo_pierde1: document.getElementById('inv-pierde1').checked,
+      solo_gana1: document.getElementById('inv-gana1').checked,
+      solo_pierde2: document.getElementById('inv-pierde2').checked,
+      solo_gana2: document.getElementById('inv-gana2').checked,
+      pagina: invPaginaActual,
+      por_pagina: 100
+    };
+    const r = await fetch(BASE_PATH + '/api/investigaciones-pres/comparar', {
+      method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)
+    });
+    const j = await r.json();
+    if (!j.success) { document.getElementById('inv-comparar-content').innerHTML = `<div class="error">${j.error}</div>`; return; }
+    invComparData = j;
+    invComparData._codpartido1 = sel1?.dataset?.cp;
+    invComparData._codpartido2 = sel2?.dataset?.cp;
+    invRenderCompar(j);
+  } catch(e) {
+    document.getElementById('inv-comparar-content').innerHTML = `<div class="error">${e.message}</div>`;
+  } finally {
+    btn.disabled = false; btn.textContent = '⚖️ Comparar';
+    document.getElementById('inv-loading').style.display = 'none';
+  }
+}
+
+function invRenderCompar(j) {
+  const cont = document.getElementById('inv-comparar-content');
+  const info = document.getElementById('inv-info-total');
+  info.textContent = `${j.total.toLocaleString('es-CO')} mesas en común — Día ${j.numdia}`;
+  if (!j.filas.length) { cont.innerHTML = '<p style="color:#666">Sin resultados.</p>'; return; }
+
+  let html = `<table style="font-size:12.5px"><thead><tr style="background:linear-gradient(135deg,#1e3a8a,#2c3e50);color:#fff">
+    <th rowspan="2">#</th><th rowspan="2">Depto</th><th rowspan="2">Municipio</th><th rowspan="2">Zona</th>
+    <th rowspan="2">Puesto</th><th rowspan="2">Mesa</th>
+    <th colspan="4" style="background:rgba(37,99,235,0.3)">🔵 ${j.candidato1}</th>
+    <th colspan="4" style="background:rgba(230,126,34,0.3)">🟠 ${j.candidato2}</th>
+  </tr><tr style="background:#34495e;color:#fff">
+    <th>Prec</th><th>Día ${j.numdia}</th><th>Dif</th><th>Ev</th>
+    <th>Prec</th><th>Día ${j.numdia}</th><th>Dif</th><th>Ev</th>
+  </tr></thead><tbody>`;
+  j.filas.forEach((f, i) => {
+    const n = (j.pagina-1)*j.por_pagina + i + 1;
+    const d1 = f.diferencia1 || 0, d2 = f.diferencia2 || 0;
+    const c1 = d1>0?'#16a34a':d1<0?'#dc3545':'#666';
+    const c2 = d2>0?'#16a34a':d2<0?'#dc3545':'#666';
+    const ev1 = f.num_evidencias1 > 0 ? `✅ ${f.num_evidencias1}` : (f.sin_evidencia ? '🚫' : '📎');
+    const ev2 = f.num_evidencias2 > 0 ? `✅ ${f.num_evidencias2}` : (f.sin_evidencia ? '🚫' : '📎');
+    html += `<tr style="background:${i%2?'#f8fafc':'#fff'}">
+      <td>${n}</td>
+      <td>${f.nomdepto||''}</td>
+      <td>${f.nommipio||''}</td>
+      <td style="text-align:center">${f.codzona}</td>
+      <td style="font-size:0.92em">${(f.codpuesto||'')} - ${(f.nompuesto||'').substring(0,28)}</td>
+      <td style="text-align:center;font-weight:700">${f.mesa||''}</td>
+      <td class="number">${(f.preconteo1||0).toLocaleString('es-CO')}</td>
+      <td class="number">${(f.dia_valor1||0).toLocaleString('es-CO')}</td>
+      <td class="number" style="color:${c1};font-weight:700">${d1>0?'+':''}${d1}</td>
+      <td style="text-align:center">${ev1}</td>
+      <td class="number">${(f.preconteo2||0).toLocaleString('es-CO')}</td>
+      <td class="number">${(f.dia_valor2||0).toLocaleString('es-CO')}</td>
+      <td class="number" style="color:${c2};font-weight:700">${d2>0?'+':''}${d2}</td>
+      <td style="text-align:center">${ev2}</td>
+    </tr>`;
+  });
+  html += '</tbody></table>';
+  // Botón crear investigación
+  html += `<div style="margin-top:14px;text-align:center">
+    <button onclick="invCrearInvestigacion()" id="inv-btn-crear"
+      style="padding:10px 28px;background:linear-gradient(135deg,#16a34a,#22c55e);color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:700">
+      ✅ Crear Investigación con estas ${j.total.toLocaleString('es-CO')} mesas
+    </button>
+  </div>`;
+  cont.innerHTML = html;
+
+  // Paginación
+  const pagDiv = document.getElementById('inv-paginacion');
+  const tp = j.paginas;
+  if (tp > 1) {
+    let pg = '';
+    const bs = a => `padding:6px 12px;background:${a?'#1e3a8a':'#fff'};color:${a?'#fff':'#1e3a8a'};border:1px solid #1e3a8a;border-radius:4px;cursor:pointer;font-size:13px;font-weight:600`;
+    pg += `<button onclick="invBuscar(1)" ${j.pagina===1?'disabled':''} style="${bs(false)}">«</button>`;
+    pg += `<button onclick="invBuscar(${j.pagina-1})" ${j.pagina===1?'disabled':''} style="${bs(false)}">‹</button>`;
+    const d = Math.max(1, j.pagina-4), h = Math.min(tp, d+9);
+    for (let p=d; p<=h; p++) pg += `<button onclick="invBuscar(${p})" style="${bs(p===j.pagina)}">${p}</button>`;
+    pg += `<button onclick="invBuscar(${j.pagina+1})" ${j.pagina===tp?'disabled':''} style="${bs(false)}">›</button>`;
+    pg += `<button onclick="invBuscar(${tp})" ${j.pagina===tp?'disabled':''} style="${bs(false)}">»</button>`;
+    pg += `<span style="margin-left:10px;color:#666;font-size:13px">Página ${j.pagina} de ${tp}</span>`;
+    pagDiv.innerHTML = pg;
+  } else { pagDiv.innerHTML = ''; }
+}
+
+async function invCrearInvestigacion() {
+  const j = invComparData;
+  if (!j) return;
+  // Para crear, traer TODAS las mesas (no solo la página actual)
+  if (!confirm(`¿Crear investigación con las ${j.total.toLocaleString('es-CO')} mesas comparadas?`)) return;
+  const btn = document.getElementById('inv-btn-crear');
+  btn.disabled = true; btn.textContent = '⏳ Cargando todas las mesas...';
+  try {
+    // Pedir todas las páginas
+    const todas = [];
+    const tp = j.paginas;
+    for (let p = 1; p <= tp; p++) {
+      const body = {
+        codcandidato1: j.codcandidato1, codcandidato2: j.codcandidato2,
+        coddepto: document.getElementById('inv-depto').value || null,
+        codmipio: document.getElementById('inv-mpio').value || null,
+        numdia: document.getElementById('inv-dia').value || null,
+        solo_pierde1: document.getElementById('inv-pierde1').checked,
+        solo_gana1: document.getElementById('inv-gana1').checked,
+        solo_pierde2: document.getElementById('inv-pierde2').checked,
+        solo_gana2: document.getElementById('inv-gana2').checked,
+        pagina: p, por_pagina: 2000
+      };
+      const r = await fetch(BASE_PATH + '/api/investigaciones-pres/comparar', {
+        method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)
+      });
+      const rj = await r.json();
+      if (rj.success) todas.push(...rj.filas);
+    }
+    btn.textContent = `⏳ Creando ${todas.length} mesas...`;
+    const res = await fetch(BASE_PATH + '/api/investigaciones-pres/crear', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        mesas: todas,
+        codcandidato1: j.codcandidato1, codcandidato2: j.codcandidato2,
+        candidato1: j.candidato1, candidato2: j.candidato2,
+        partido1: j.partido1, partido2: j.partido2,
+        codpartido1: j._codpartido1, codpartido2: j._codpartido2,
+        numdia: j.numdia
+      })
+    });
+    const jres = await res.json();
+    if (jres.success) {
+      alert(`✅ Investigación creada: ${jres.creadas} mesas nuevas (de ${jres.total} comparadas).`);
+      invCargarListado();
+    } else {
+      alert('Error: ' + jres.error);
+    }
+  } catch(e) {
+    alert('Error: ' + e.message);
+  } finally {
+    btn.disabled = false; btn.textContent = '✅ Crear Investigación';
+  }
+}
+
+async function invCargarListado() {
+  const cont = document.getElementById('inv-listado-content');
+  document.getElementById('inv-listado-loading').style.display = 'block';
+  cont.innerHTML = '';
+  const r = await fetchJSON('/api/investigaciones-pres/listar-agrupadas');
+  document.getElementById('inv-listado-loading').style.display = 'none';
+  if (!r.data.success) { cont.innerHTML = `<div class="error">${r.data.error}</div>`; return; }
+  if (!r.data.data.length) { cont.innerHTML = '<p style="color:#aaa;font-style:italic">Sin investigaciones todavía.</p>'; return; }
+  let html = '<table><thead><tr>'
+    + '<th>#</th><th>Depto</th><th>Lado A (Pierde)</th><th>Lado B (Gana)</th>'
+    + '<th class="number">Mpios</th><th class="number">Mesas</th><th class="number">Con ev</th><th>Acciones</th>'
+    + '</tr></thead><tbody>';
+  r.data.data.forEach((g, i) => {
+    const conEv = Number(g.mesas_con_evidencia)||0;
+    const total = Number(g.num_mesas)||0;
+    const pct = total>0 ? Math.round(conEv/total*100) : 0;
+    html += `<tr>
+      <td>${i+1}</td>
+      <td>${g.coddepto} - ${g.nomdepto||''}</td>
+      <td><b>${g.codcandidato1}</b> - ${g.nom_candidato1||''}<br><span style="font-size:0.78em;color:#888">${g.nom_partido1||''}</span></td>
+      <td><b>${g.codcandidato2}</b> - ${g.nom_candidato2||''}<br><span style="font-size:0.78em;color:#888">${g.nom_partido2||''}</span></td>
+      <td class="number">${g.num_mpios}</td>
+      <td class="number"><b>${total.toLocaleString('es-CO')}</b></td>
+      <td class="number">${conEv.toLocaleString('es-CO')} <span style="color:#888;font-size:0.85em">(${pct}%)</span></td>
+      <td><button onclick="invEliminarGrupo(${g.coddepto}, ${g.codcandidato1}, ${g.codcandidato2})"
+            style="padding:5px 10px;background:#dc3545;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px">🗑</button></td>
+    </tr>`;
+  });
+  html += '</tbody></table>';
+  html += `<p style="color:#666;margin-top:8px">Total grupos: ${r.data.data.length}</p>`;
+  cont.innerHTML = html;
+}
+
+async function invEliminarGrupo(cd, c1, c2) {
+  if (!confirm(`¿Eliminar el grupo de investigación (depto ${cd}, candidatos ${c1} vs ${c2})?`)) return;
+  const res = await fetch(BASE_PATH + '/api/investigaciones-pres/eliminar-grupo', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ coddepto: cd, codcandidato1: c1, codcandidato2: c2 })
+  });
+  const j = await res.json();
+  if (j.success) { alert(`✅ ${j.eliminadas} mesas eliminadas.`); invCargarListado(); }
+  else { alert('Error: ' + j.error); }
+}
+
+// ===================== MÓDULO CONSULTA ESCRUTINIO =====================
+let ceeInit_done = false;
+
+async function ceeInit() {
+  if (ceeInit_done) return;
+  ceeInit_done = true;
+  // Cargar días procesados
+  const rd = await fetchJSON('/api/escrutinio/dias-procesados');
+  const selDia = document.getElementById('cee-dia');
+  if (rd.data.success && rd.data.data.length) {
+    rd.data.data.forEach(d => {
+      selDia.innerHTML += `<option value="${d.numdia}">Día ${d.numdia} (${d.facceso})</option>`;
+    });
+  }
+  // Cargar deptos
+  const rdep = await fetchJSON('/api/consulta-escrutinio/filtros/departamentos');
+  const sd = document.getElementById('cee-depto');
+  if (rdep.data.success) {
+    rdep.data.data.forEach(d => {
+      sd.innerHTML += `<option value="${d.coddepto}">${d.coddepto} - ${d.nomdepto}</option>`;
+    });
+  }
+  // Cargar candidatos
+  const rc = await fetchJSON('/api/consulta-escrutinio/filtros/candidatos');
+  const sc = document.getElementById('cee-candidato');
+  if (rc.data.success) {
+    rc.data.data.forEach(c => {
+      sc.innerHTML += `<option value="${c.codcandidato}">${c.codcandidato} - ${c.nomcandidato}</option>`;
+    });
+  }
+}
+
+async function ceeOnDeptoChange() {
+  const cd = document.getElementById('cee-depto').value;
+  const sm = document.getElementById('cee-mpio');
+  const sz = document.getElementById('cee-zona');
+  const sp = document.getElementById('cee-puesto');
+  sm.innerHTML = '<option value="">Todos</option>'; sm.disabled = true;
+  sz.innerHTML = '<option value="">Todas</option>'; sz.disabled = true;
+  sp.innerHTML = '<option value="">Todos</option>'; sp.disabled = true;
+  if (!cd) return;
+  const r = await fetchJSON(`/api/consulta-escrutinio/filtros/municipios?coddepto=${cd}`);
+  if (r.data.success) {
+    r.data.data.forEach(m => sm.innerHTML += `<option value="${m.codmipio}">${m.codmipio} - ${m.nommipio||'—'}</option>`);
+    sm.disabled = false;
+  }
+}
+
+async function ceeOnMpioChange() {
+  const cd = document.getElementById('cee-depto').value;
+  const cm = document.getElementById('cee-mpio').value;
+  const sz = document.getElementById('cee-zona');
+  const sp = document.getElementById('cee-puesto');
+  sz.innerHTML = '<option value="">Todas</option>'; sz.disabled = true;
+  sp.innerHTML = '<option value="">Todos</option>'; sp.disabled = true;
+  if (!cm) return;
+  const rz = await fetchJSON(`/api/consulta-escrutinio/filtros/zonas?coddepto=${cd}&codmipio=${cm}`);
+  if (rz.data.success) {
+    rz.data.data.forEach(z => sz.innerHTML += `<option value="${z.codzona}">Zona ${z.codzona}</option>`);
+    sz.disabled = false;
+  }
+  const rp = await fetchJSON(`/api/consulta-escrutinio/filtros/puestos?coddepto=${cd}&codmipio=${cm}`);
+  if (rp.data.success && rp.data.data.length) {
+    rp.data.data.forEach(p => sp.innerHTML += `<option value="${p.codpuesto}">${p.codpuesto} - ${p.nompuesto||'—'}</option>`);
+    sp.disabled = false;
+  }
+}
+
+async function ceeOnZonaChange() {
+  const cd = document.getElementById('cee-depto').value;
+  const cm = document.getElementById('cee-mpio').value;
+  const cz = document.getElementById('cee-zona').value;
+  const sp = document.getElementById('cee-puesto');
+  sp.innerHTML = '<option value="">Todos</option>';
+  if (!cd || !cm) return;
+  const url = cz ? `/api/consulta-escrutinio/filtros/puestos?coddepto=${cd}&codmipio=${cm}&codzona=${cz}`
+                 : `/api/consulta-escrutinio/filtros/puestos?coddepto=${cd}&codmipio=${cm}`;
+  const r = await fetchJSON(url);
+  if (r.data.success) {
+    r.data.data.forEach(p => sp.innerHTML += `<option value="${p.codpuesto}">${p.codpuesto} - ${p.nompuesto||'—'}</option>`);
+    sp.disabled = false;
+  }
+}
+
+function ceeLimpiar() {
+  document.getElementById('cee-dia').value = '';
+  document.getElementById('cee-depto').value = '';
+  const sm = document.getElementById('cee-mpio'); sm.innerHTML = '<option value="">Todos</option>'; sm.disabled = true;
+  const sz = document.getElementById('cee-zona'); sz.innerHTML = '<option value="">Todas</option>'; sz.disabled = true;
+  const sp = document.getElementById('cee-puesto'); sp.innerHTML = '<option value="">Todos</option>'; sp.disabled = true;
+  document.getElementById('cee-candidato').value = '';
+  document.getElementById('cee-content').innerHTML = '<p style="color:#666;font-style:italic">Seleccione filtros y presione "Buscar".</p>';
+  document.getElementById('cee-info').style.display = 'none';
+}
+
+async function ceeBuscar() {
+  const btn = document.getElementById('cee-btn-buscar');
+  const loading = document.getElementById('cee-loading');
+  const cont = document.getElementById('cee-content');
+  const info = document.getElementById('cee-info');
+  btn.disabled = true; btn.textContent = '⏳ Buscando...';
+  loading.style.display = 'block'; cont.innerHTML = ''; info.style.display = 'none';
+  try {
+    const body = {
+      numdia:       document.getElementById('cee-dia').value || null,
+      coddepto:     document.getElementById('cee-depto').value || null,
+      codmipio:     document.getElementById('cee-mpio').value || null,
+      codzona:      document.getElementById('cee-zona').value || null,
+      codpuesto:    document.getElementById('cee-puesto').value || null,
+      codcandidato: document.getElementById('cee-candidato').value || null,
+    };
+    const res = await fetch(BASE_PATH + '/api/consulta-escrutinio/consultar', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(body)
+    });
+    const j = await res.json();
+    if (!j.success) {
+      cont.innerHTML = `<div class="error">Error: ${j.error}</div>`;
+      return;
+    }
+    if (j.tipo_resultado === 'sin_datos') {
+      cont.innerHTML = `<p style="color:#94a3b8;font-style:italic">${j.message}</p>`;
+      return;
+    }
+    info.innerHTML = `<strong>Día ${j.numdia}</strong> (último día disponible: ${j.ultimo_dia}) — <strong>${j.total}</strong> filas`;
+    info.style.display = 'block';
+    if (!j.data.length) {
+      cont.innerHTML = '<p style="color:#666">No se encontraron resultados.</p>';
+      return;
+    }
+    ceeRender(j);
+  } catch(e) {
+    cont.innerHTML = `<div class="error">Error: ${e.message}</div>`;
+  } finally {
+    btn.disabled = false; btn.textContent = '🔍 Buscar';
+    loading.style.display = 'none';
+  }
+}
+
+function ceeRender(resp) {
+  const cont = document.getElementById('cee-content');
+  const rows = resp.data;
+  const tipo = resp.tipo_resultado;
+
+  let columnas;
+  if (tipo === 'resumen_nacional' || tipo === 'por_departamento' || tipo === 'por_municipio' || tipo === 'candidato_nacional') {
+    columnas = [
+      { key:'codcandidato', label:'Cód.' },
+      { key:'nomcandidato', label:'Candidato' },
+      { key:'nompartido', label:'Partido' },
+      { key:'total_votos', label:'Votos', num:true }
+    ];
+  } else if (tipo === 'por_zona') {
+    columnas = [
+      { key:'codpuesto', label:'Cód. Puesto' },
+      { key:'nompuesto', label:'Puesto' },
+      { key:'codcandidato', label:'Cód.' },
+      { key:'nomcandidato', label:'Candidato' },
+      { key:'total_votos', label:'Votos', num:true }
+    ];
+  } else if (tipo === 'por_puesto_mesas') {
+    columnas = [
+      { key:'mesa', label:'Mesa' },
+      { key:'codcandidato', label:'Cód.' },
+      { key:'nomcandidato', label:'Candidato' },
+      { key:'nompartido', label:'Partido' },
+      { key:'total_votos', label:'Votos', num:true }
+    ];
+  } else {
+    columnas = [
+      { key:'coddepto', label:'Depto' },
+      { key:'codmipio', label:'Mpio' },
+      { key:'codzona', label:'Zona' },
+      { key:'codpuesto', label:'Puesto' },
+      { key:'mesa', label:'Mesa' },
+      { key:'codcandidato', label:'Cód.' },
+      { key:'nomcandidato', label:'Candidato' },
+      { key:'total_votos', label:'Votos', num:true }
+    ];
+  }
+
+  let html = '<table><thead><tr>';
+  columnas.forEach(c => html += `<th class="${c.num?'number':''}">${c.label}</th>`);
+  html += '</tr></thead><tbody>';
+  let totalVotos = 0;
+  rows.forEach(r => {
+    html += '<tr>';
+    columnas.forEach(c => {
+      const v = r[c.key];
+      if (c.num) {
+        const n = Number(v) || 0;
+        totalVotos += n;
+        html += `<td class="number">${n.toLocaleString('es-CO')}</td>`;
+      } else html += `<td>${v != null ? v : '—'}</td>`;
+    });
+    html += '</tr>';
+  });
+  html += '</tbody><tfoot><tr style="background:linear-gradient(135deg,#1e3a8a,#2563eb);color:#fff;font-weight:bold">';
+  columnas.forEach((c, i) => {
+    if (c.num) html += `<td class="number">${totalVotos.toLocaleString('es-CO')}</td>`;
+    else if (i === 0) html += '<td></td>';
+    else if (i === columnas.length - 2) html += '<td>TOTAL</td>';
+    else html += '<td></td>';
+  });
+  html += '</tr></tfoot></table>';
+  html += `<p style="color:#666;margin-top:8px">Total registros: ${rows.length} | Tipo: ${tipo}</p>`;
+  cont.innerHTML = html;
+}
+
+// ===================== MÓDULO MMV ESCRUTINIO =====================
+let escArchivoActual = null;
+let escArchivosMasivo = [];
+let escHistorialData = [];
+let escDeptoMap = null;
+let escPaginaActual = 1;
+let escCronoInterval = null;
+
+async function escInit() {
+  if (!escDeptoMap) {
+    const r = await fetchJSON('/api/divipol/departamentos');
+    if (r.data.success) {
+      escDeptoMap = {};
+      r.data.data.forEach(d => {
+        escDeptoMap[String(d.coddepto).padStart(2,'0')] = d.nomdepto || '';
+      });
+    } else { escDeptoMap = {}; }
+  }
+  await escCargarEstadoDia();
+  await escCargarHistorial();
+}
+
+function escDeptoLabel(cod) {
+  if (!cod || cod === '—') return '—';
+  return escDeptoMap && escDeptoMap[cod] ? `${cod} - ${escDeptoMap[cod]}` : cod;
+}
+
+function escFmtTam(b) {
+  if (b < 1024*1024) return (b/1024).toFixed(1) + ' KB';
+  return (b/(1024*1024)).toFixed(2) + ' MB';
+}
+
+function escValidarFechaYAbrir() {
+  if (!document.getElementById('esc-facceso').value) {
+    alert('Debe seleccionar primero la Fecha de Acceso');
+    return;
+  }
+  document.getElementById('esc-input-archivo').click();
+}
+
+function escValidarFechaYAbrirMasivo() {
+  if (!document.getElementById('esc-facceso').value) {
+    alert('Debe seleccionar primero la Fecha de Acceso (arriba en la sección de cargue individual)');
+    return;
+  }
+  document.getElementById('esc-input-masivo').click();
+}
+
+function escArchivoSeleccionado() {
+  const f = document.getElementById('esc-input-archivo').files[0];
+  if (!f) return;
+  escArchivoActual = f;
+  document.getElementById('esc-info-nombre').textContent = '📄 ' + f.name;
+  document.getElementById('esc-info-detalle').textContent =
+    `${escFmtTam(f.size)} · Fecha acceso: ${document.getElementById('esc-facceso').value}`;
+  document.getElementById('esc-info-archivo').style.display = 'block';
+  document.getElementById('esc-resultado').style.display = 'none';
+}
+
+function escCancelar() {
+  escArchivoActual = null;
+  document.getElementById('esc-input-archivo').value = '';
+  document.getElementById('esc-info-archivo').style.display = 'none';
+  document.getElementById('esc-resultado').style.display = 'none';
+}
+
+function escMostrarResultado(ok, msg) {
+  const div = document.getElementById('esc-resultado');
+  div.style.display = 'block';
+  if (ok) {
+    div.style.background = '#dcfce7'; div.style.color = '#166534'; div.style.borderLeft = '3px solid #16a34a';
+  } else {
+    div.style.background = '#fef2f2'; div.style.color = '#991b1b'; div.style.borderLeft = '3px solid #ef4444';
+  }
+  div.textContent = msg;
+}
+
+function escCronoStart(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.style.display = 'inline-block';
+  const t0 = Date.now();
+  if (escCronoInterval) clearInterval(escCronoInterval);
+  escCronoInterval = setInterval(() => {
+    const s = Math.floor((Date.now() - t0) / 1000);
+    const mm = String(Math.floor(s/60)).padStart(2,'0');
+    const ss = String(s%60).padStart(2,'0');
+    el.textContent = `⏱ ${mm}:${ss}`;
+  }, 1000);
+}
+function escCronoStop() {
+  if (escCronoInterval) { clearInterval(escCronoInterval); escCronoInterval = null; }
+}
+
+async function escEnviar() {
+  const f = escArchivoActual;
+  const facceso = document.getElementById('esc-facceso').value;
+  if (!f) return;
+  if (!facceso) { alert('Seleccione la Fecha de Acceso'); return; }
+
+  // Verificar duplicado
+  const rChk = await fetchJSON('/api/escrutinio/verificar', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ nombrearchivo: f.name, facceso })
+  });
+  if (rChk.data.success && rChk.data.existe) {
+    escMostrarResultado(false,
+      `❌ El archivo "${f.name}" ya fue cargado con facceso ${facceso}. Elimínelo primero del Historial si quiere recargarlo.`);
+    return;
+  }
+
+  const btn = document.getElementById('esc-btn-cargar');
+  btn.disabled = true; btn.textContent = 'Cargando...';
+  escCronoStart('esc-cronometro');
+  try {
+    const fd = new FormData();
+    fd.append('archivo', f);
+    fd.append('facceso', facceso);
+    fd.append('tiene_encabezado', document.getElementById('esc-check-encab').checked ? 'true' : 'false');
+    const res = await fetch(BASE_PATH + '/api/escrutinio/cargar', { method:'POST', body: fd });
+    const j = await res.json();
+    if (j.success) {
+      escMostrarResultado(true, `✅ ${j.message}`);
+      escCancelar();
+      escCargarHistorial();
+      escCargarEstadoDia();
+    } else {
+      escMostrarResultado(false, '❌ ' + (j.error || 'Error desconocido'));
+    }
+  } catch(e) {
+    escMostrarResultado(false, '❌ ' + e.message);
+  } finally {
+    btn.disabled = false; btn.textContent = 'Cargar';
+    escCronoStop();
+  }
+}
+
+async function escCargarRuta() {
+  const ruta = document.getElementById('esc-ruta').value.trim();
+  const facceso = document.getElementById('esc-ruta-facceso').value;
+  if (!ruta) { alert('Indique la ruta'); return; }
+  if (!facceso) { alert('Indique fecha de acceso'); return; }
+  const tEncab = document.getElementById('esc-ruta-check-encab').checked;
+  const btn = document.getElementById('esc-btn-ruta');
+  btn.disabled = true; btn.textContent = 'Cargando...';
+  document.getElementById('esc-ruta-progreso').style.display = 'block';
+  escCronoStart('esc-ruta-cron');
+  try {
+    const res = await fetch(BASE_PATH + '/api/escrutinio/cargar-ruta', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ ruta, facceso, tiene_encabezado: tEncab })
+    });
+    const j = await res.json();
+    if (j.success) {
+      alert('✅ ' + j.message);
+      document.getElementById('esc-ruta').value = '';
+      escCargarHistorial();
+      escCargarEstadoDia();
+    } else {
+      alert('❌ ' + j.error);
+    }
+  } catch(e) {
+    alert('❌ ' + e.message);
+  } finally {
+    btn.disabled = false; btn.textContent = 'Cargar';
+    document.getElementById('esc-ruta-progreso').style.display = 'none';
+    escCronoStop();
+  }
+}
+
+function escMasivoSeleccionado() {
+  const files = Array.from(document.getElementById('esc-input-masivo').files);
+  if (!files.length) return;
+  escArchivosMasivo = files.map(f => ({file:f, estado:'pendiente', mensaje:''}));
+  document.getElementById('esc-titulo-masivo').textContent = `${files.length} archivo(s) seleccionado(s)`;
+  escRenderTablaMasivo();
+  document.getElementById('esc-lista-masivo').style.display = 'block';
+}
+function escRenderTablaMasivo() {
+  let html = '<table style="font-size:13px"><thead><tr><th>#</th><th>Archivo</th><th>Tamaño</th><th>Estado</th><th>Mensaje</th></tr></thead><tbody>';
+  escArchivosMasivo.forEach((it,i) => {
+    const color = it.estado==='ok'?'#16a34a':it.estado==='error'?'#dc3545':it.estado==='cargando'?'#f59e0b':it.estado==='omitido'?'#94a3b8':'#6b7280';
+    const ico   = it.estado==='ok'?'✅':it.estado==='error'?'❌':it.estado==='cargando'?'⏳':it.estado==='omitido'?'⏭':'⏸';
+    html += `<tr>
+      <td>${i+1}</td><td>${it.file.name}</td><td class="number">${escFmtTam(it.file.size)}</td>
+      <td style="color:${color};font-weight:600">${ico} ${it.estado}</td><td>${it.mensaje||''}</td>
+    </tr>`;
+  });
+  html += '</tbody></table>';
+  document.getElementById('esc-tabla-masivo').innerHTML = html;
+}
+function escCancelarMasivo() {
+  escArchivosMasivo = [];
+  document.getElementById('esc-input-masivo').value = '';
+  document.getElementById('esc-lista-masivo').style.display = 'none';
+}
+async function escIniciarMasivo() {
+  const facceso = document.getElementById('esc-facceso').value;
+  if (!facceso) { alert('Defina Fecha de Acceso en la sección individual'); return; }
+  const tEncab = document.getElementById('esc-check-encab-masivo').checked;
+  const total = escArchivosMasivo.length;
+  document.getElementById('esc-progreso-masivo').style.display = 'block';
+  document.getElementById('esc-btn-masivo').disabled = true;
+  let nOk=0, nSkip=0, nErr=0;
+  for (let i = 0; i < total; i++) {
+    const it = escArchivosMasivo[i];
+    it.estado = 'cargando'; escRenderTablaMasivo();
+    try {
+      const fd = new FormData();
+      fd.append('archivo', it.file);
+      fd.append('facceso', facceso);
+      fd.append('tiene_encabezado', tEncab ? 'true' : 'false');
+      const res = await fetch(BASE_PATH + '/api/escrutinio/cargar', { method:'POST', body: fd });
+      const j = await res.json();
+      if (j.success) {
+        it.estado = 'ok'; it.mensaje = `${j.data.registros.toLocaleString('es-CO')} reg. en ${j.data.tiempo_carga}`; nOk++;
+      } else if (j.duplicado) {
+        it.estado = 'omitido'; it.mensaje = j.error; nSkip++;
+      } else {
+        it.estado = 'error'; it.mensaje = j.error; nErr++;
+      }
+    } catch(e) { it.estado = 'error'; it.mensaje = e.message; nErr++; }
+    const pct = Math.round((i+1)/total*100);
+    document.getElementById('esc-progreso-pct').textContent = pct + '%';
+    document.getElementById('esc-progreso-texto').textContent = `${i+1} de ${total}...`;
+    document.getElementById('esc-progreso-barra').style.width = pct + '%';
+    escRenderTablaMasivo();
+  }
+  document.getElementById('esc-progreso-texto').textContent =
+    `Completado: ${nOk} cargado(s), ${nSkip} omitido(s), ${nErr} error(es).`;
+  document.getElementById('esc-btn-masivo').disabled = false;
+  escCargarHistorial();
+  escCargarEstadoDia();
+}
+
+// --- Estado por día ---
+async function escCargarEstadoDia() {
+  const cont = document.getElementById('esc-estado-content');
+  const r = await fetchJSON('/api/escrutinio/estado-por-dia');
+  if (!r.data.success) { cont.innerHTML = `<div class="error">${r.data.error}</div>`; return; }
+  if (!r.data.data.length) { cont.innerHTML = '<p style="color:#666">Sin archivos cargados todavía.</p>'; return; }
+  let html = '<table><thead><tr><th>Fecha acceso</th><th class="number">Archivos</th><th class="number">Registros</th><th class="number">Tamaño (MB)</th><th>Última carga</th></tr></thead><tbody>';
+  let tA=0, tR=0, tM=0;
+  r.data.data.forEach(row => {
+    tA += Number(row.archivos)||0;
+    tR += Number(row.total_registros)||0;
+    tM += Number(row.total_mb)||0;
+    html += `<tr>
+      <td>${row.facceso}</td>
+      <td class="number">${Number(row.archivos).toLocaleString('es-CO')}</td>
+      <td class="number">${Number(row.total_registros||0).toLocaleString('es-CO')}</td>
+      <td class="number">${Number(row.total_mb||0).toLocaleString('es-CO',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+      <td>${row.ultima_carga || ''}</td>
+    </tr>`;
+  });
+  html += `</tbody><tfoot><tr style="background:linear-gradient(135deg,#1e3a8a,#2563eb);color:#fff;font-weight:bold">
+    <td>TOTAL</td>
+    <td class="number">${tA.toLocaleString('es-CO')}</td>
+    <td class="number">${tR.toLocaleString('es-CO')}</td>
+    <td class="number">${tM.toLocaleString('es-CO',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+    <td></td>
+  </tr></tfoot></table>`;
+  cont.innerHTML = html;
+}
+
+// --- Historial con filtros + paginación ---
+async function escCargarHistorial() {
+  const cont = document.getElementById('esc-historial-content');
+  if (!cont) return;
+  document.getElementById('esc-historial-loading').style.display = 'block';
+  cont.innerHTML = '';
+  const r = await fetchJSON('/api/escrutinio/historial');
+  document.getElementById('esc-historial-loading').style.display = 'none';
+  if (!r.data.success) { cont.innerHTML = `<div class="error">${r.data.error}</div>`; return; }
+  escHistorialData = r.data.data || [];
+
+  // Filtros: deptos
+  const selDepto = document.getElementById('esc-filtro-depto');
+  const dV = selDepto.value;
+  const deptos = new Set();
+  escHistorialData.forEach(row => {
+    const m = (row.nombrearchivo || '').match(/_(\d{2})_/);
+    if (m) deptos.add(m[1]);
+  });
+  selDepto.innerHTML = '<option value="">Todos</option>';
+  Array.from(deptos).sort().forEach(d => {
+    selDepto.innerHTML += `<option value="${d}"${d===dV?' selected':''}>${escDeptoLabel(d)}</option>`;
+  });
+
+  // Filtros: facceso
+  const selF = document.getElementById('esc-filtro-facceso');
+  const fV = selF.value;
+  const fechas = new Set();
+  escHistorialData.forEach(row => { if (row.facceso) fechas.add(String(row.facceso)); });
+  selF.innerHTML = '<option value="">Todas</option>';
+  Array.from(fechas).sort().reverse().forEach(f => {
+    selF.innerHTML += `<option value="${f}"${f===fV?' selected':''}>${f}</option>`;
+  });
+
+  escRefrescarRender();
+}
+
+function escFiltrar(data) {
+  const txt = (document.getElementById('esc-filtro-nombre').value || '').toLowerCase().trim();
+  const dep = document.getElementById('esc-filtro-depto').value || '';
+  const fac = document.getElementById('esc-filtro-facceso').value || '';
+  return data.filter(r => {
+    if (txt && !(r.nombrearchivo||'').toLowerCase().includes(txt)) return false;
+    if (dep) {
+      const m = (r.nombrearchivo||'').match(/_(\d{2})_/);
+      if (!m || m[1] !== dep) return false;
+    }
+    if (fac && String(r.facceso) !== fac) return false;
+    return true;
+  });
+}
+
+function escLimpiarFiltros() {
+  document.getElementById('esc-filtro-nombre').value = '';
+  document.getElementById('esc-filtro-depto').value = '';
+  document.getElementById('esc-filtro-facceso').value = '';
+  escPaginaActual = 1;
+  escRefrescarRender();
+}
+
+function escCambiarPagina(p) { escPaginaActual = p; escRefrescarRender(); }
+
+function escRefrescarRender() {
+  const cont = document.getElementById('esc-historial-content');
+  if (!cont) return;
+  if (!escHistorialData.length) {
+    cont.innerHTML = '<p style="color:#666">No hay archivos cargados todavía.</p>';
+    document.getElementById('esc-paginacion').innerHTML = '';
+    escActualizarSeleccion();
+    return;
+  }
+  const filtrado = escFiltrar(escHistorialData);
+  const pagSize = parseInt(document.getElementById('esc-pagsize').value);
+  const totalPag = Math.max(1, Math.ceil(filtrado.length / pagSize));
+  if (escPaginaActual > totalPag) escPaginaActual = 1;
+  const start = (escPaginaActual - 1) * pagSize;
+  const slice = filtrado.slice(start, start + pagSize);
+
+  const tReg = filtrado.reduce((s, r) => s + (r.registros || 0), 0);
+  const tMB  = filtrado.reduce((s, r) => s + Number(r.tamano_mb || 0), 0);
+
+  let html = '<table><thead><tr>' +
+    '<th style="width:30px"><input type="checkbox" id="esc-chk-all" onchange="escToggleTodos(this.checked)"></th>' +
+    '<th>#</th><th>Archivo</th><th>Depto</th><th>Fecha acceso</th><th class="number">Registros</th>' +
+    '<th class="number">MB</th><th>Tiempo</th><th>Cargado</th><th>Usuario</th><th></th></tr></thead><tbody>';
+  slice.forEach((row, i) => {
+    const m = (row.nombrearchivo||'').match(/_(\d{2})_/);
+    const dep = m ? escDeptoLabel(m[1]) : '—';
+    const esc1 = row.nombrearchivo.replace(/"/g, '&quot;');
+    const fac = row.facceso || '';
+    html += `<tr>
+      <td style="text-align:center"><input type="checkbox" class="esc-row-chk" data-nombre="${esc1}" data-facceso="${fac}" onchange="escActualizarSeleccion()"></td>
+      <td>${start+i+1}</td>
+      <td>${row.nombrearchivo}</td>
+      <td>${dep}</td>
+      <td>${fac}</td>
+      <td class="number">${(row.registros||0).toLocaleString('es-CO')}</td>
+      <td class="number">${Number(row.tamano_mb||0).toLocaleString('es-CO',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+      <td>${row.tiempo_carga||'—'}</td>
+      <td>${row.fecha ? String(row.fecha).slice(0,16) : '—'}</td>
+      <td>${row.usuario_cargue||'—'}</td>
+      <td><button onclick="escEliminarUno('${row.nombrearchivo.replace(/'/g,"\\'")}','${fac}')"
+            style="padding:4px 10px;background:#dc3545;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px">🗑</button></td>
+    </tr>`;
+  });
+  html += `</tbody><tfoot>
+    <tr style="background:linear-gradient(135deg,#1e3a8a,#2563eb);color:#fff;font-weight:bold">
+      <td></td><td></td>
+      <td colspan="3">TOTAL filtrado: ${filtrado.length} archivo(s)</td>
+      <td class="number">${tReg.toLocaleString('es-CO')}</td>
+      <td class="number">${tMB.toLocaleString('es-CO',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+      <td colspan="4"></td>
+    </tr></tfoot></table>`;
+  html += `<p style="color:#666;margin-top:8px;font-size:0.88em">Mostrando ${slice.length} de ${filtrado.length} filtrados (de ${escHistorialData.length} totales).</p>`;
+  cont.innerHTML = html;
+
+  // Paginación
+  const pagDiv = document.getElementById('esc-paginacion');
+  if (totalPag > 1) {
+    let pg = '';
+    const bs = a => `padding:6px 12px;background:${a?'#1e3a8a':'#fff'};color:${a?'#fff':'#1e3a8a'};border:1px solid #1e3a8a;border-radius:4px;cursor:pointer;font-size:13px;font-weight:600`;
+    pg += `<button onclick="escCambiarPagina(1)" ${escPaginaActual===1?'disabled style="opacity:0.4"':''} style="${bs(false)}">«</button>`;
+    pg += `<button onclick="escCambiarPagina(${escPaginaActual-1})" ${escPaginaActual===1?'disabled style="opacity:0.4"':''} style="${bs(false)}">‹</button>`;
+    const d = Math.max(1, escPaginaActual-4), h = Math.min(totalPag, d+9);
+    for (let p=d; p<=h; p++) pg += `<button onclick="escCambiarPagina(${p})" style="${bs(p===escPaginaActual)}">${p}</button>`;
+    pg += `<button onclick="escCambiarPagina(${escPaginaActual+1})" ${escPaginaActual===totalPag?'disabled style="opacity:0.4"':''} style="${bs(false)}">›</button>`;
+    pg += `<button onclick="escCambiarPagina(${totalPag})" ${escPaginaActual===totalPag?'disabled style="opacity:0.4"':''} style="${bs(false)}">»</button>`;
+    pg += `<span style="margin-left:10px;color:#666;font-size:13px">Página ${escPaginaActual} de ${totalPag}</span>`;
+    pagDiv.innerHTML = pg;
+  } else { pagDiv.innerHTML = ''; }
+
+  escActualizarSeleccion();
+}
+
+function escToggleTodos(chk) {
+  document.querySelectorAll('.esc-row-chk').forEach(c => c.checked = chk);
+  escActualizarSeleccion();
+}
+function escActualizarSeleccion() {
+  const chks = document.querySelectorAll('.esc-row-chk:checked');
+  document.getElementById('esc-count-sel').textContent = chks.length;
+  document.getElementById('esc-btn-eliminar-sel').style.display = chks.length > 0 ? 'inline-block' : 'none';
+  const all = document.querySelectorAll('.esc-row-chk');
+  const chkAll = document.getElementById('esc-chk-all');
+  if (chkAll) { chkAll.checked = chks.length > 0 && chks.length === all.length;
+                chkAll.indeterminate = chks.length > 0 && chks.length < all.length; }
+}
+async function escEliminarSeleccionados() {
+  const chks = Array.from(document.querySelectorAll('.esc-row-chk:checked'));
+  if (!chks.length) return;
+  const items = chks.map(c => ({ nombrearchivo: c.dataset.nombre, facceso: c.dataset.facceso }));
+  if (!confirm(`¿Eliminar ${items.length} archivo(s) y sus datos del escrutinio?`)) return;
+  const btn = document.getElementById('esc-btn-eliminar-sel');
+  btn.disabled = true; btn.textContent = 'Eliminando...';
+  try {
+    const res = await fetch(BASE_PATH + '/api/escrutinio/eliminar-batch', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ items })
+    });
+    const j = await res.json();
+    if (j.success) { alert(`✅ ${j.message}`); escCargarHistorial(); escCargarEstadoDia(); }
+    else { alert('Error: ' + j.error); }
+  } catch(e) { alert('Error: ' + e.message); }
+  finally { btn.disabled = false; }
+}
+async function escEliminarUno(nombre, facceso) {
+  if (!confirm(`¿Eliminar el archivo "${nombre}" (facceso ${facceso})?`)) return;
+  const res = await fetch(BASE_PATH + '/api/escrutinio/eliminar-batch', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ items: [{ nombrearchivo: nombre, facceso }] })
+  });
+  const j = await res.json();
+  if (j.success) { escCargarHistorial(); escCargarEstadoDia(); }
+  else { alert('Error: ' + j.error); }
+}
+
+// Auto-check sesión al cargar
+(async () => {
+  const r = await fetchJSON('/api/session');
+  if (r.data.success) {
+    sesionUsuario = r.data.data;
+    mostrarApp();
+  }
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,17 @@
+[Unit]
+Description=Auditor Escrutinio Presidencial 2026
+After=network.target postgresql.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/softwareEscrutinios/auditor-presidencial-2026
+EnvironmentFile=/opt/softwareEscrutinios/auditor-presidencial-2026/.env
+ExecStart=/usr/bin/python3 /opt/softwareEscrutinios/auditor-presidencial-2026/app.py --waitress
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
