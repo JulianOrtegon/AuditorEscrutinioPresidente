@@ -415,6 +415,8 @@ os.makedirs(PROCESADO_FOLDER, exist_ok=True)
 
 # Ruta del repositorio de PDFs E24 Presidencial (formulario por comisión escrutadora)
 E24_PRES_BASE_PATH = os.environ.get('E24_PRES_BASE_PATH', '/opt/softwareEscrutinios/E24_PRES')
+# Ruta del repositorio de PDFs E14 Presidencial (formulario por mesa)
+E14_PRES_BASE_PATH = os.environ.get('E14_PRES_BASE_PATH', '/mnt/elecciones-2026/presidencial')
 
 import re as _re
 def _extraer_depto(nombre_archivo, primera_linea=''):
@@ -1767,6 +1769,225 @@ def inv_pres_eliminar_grupo():
         logger.exception('[inv-pres/eliminar]')
         return jsonify({'success': False, 'error': str(e)}), 500
 
+# ==================== VISOR E14 PRESIDENCIAL ====================
+import base64 as _b64
+
+def _e14_pres_path_token(ruta_relativa):
+    return _b64.urlsafe_b64encode(ruta_relativa.encode()).decode().rstrip('=')
+
+def _e14_pres_decode_token(token):
+    padded = token + '=' * (-len(token) % 4)
+    return _b64.urlsafe_b64decode(padded.encode()).decode()
+
+@app.route('/api/e14-pres/buscar', methods=['GET'])
+def e14_pres_buscar():
+    """Busca E14 disponibles para una divipol dada (consulta e14_index_presidencial)."""
+    err = _require_session()
+    if err: return err
+    try:
+        cd = request.args.get('coddepto', type=int)
+        cm = request.args.get('codmipio', type=int)
+        cz = request.args.get('codzona', type=int)
+        cp = request.args.get('codpuesto')
+        mesa = request.args.get('mesa')
+        if not all([cd is not None, cm is not None, cz is not None, cp]):
+            return jsonify({'success': False, 'error': 'Faltan parámetros de divipol'}), 400
+        params = [str(cd).zfill(2), str(cm).zfill(3), str(cz).zfill(3), str(cp).zfill(2)]
+        sql = """SELECT nombre_archivo, corporacion, fuente, ruta_archivo
+                 FROM e14_index_presidencial
+                 WHERE coddepto=%s AND codmipio=%s AND codzona=%s AND codpuesto=%s"""
+        if mesa:
+            sql += ' AND mesa = %s'; params.append(str(mesa).zfill(3))
+        sql += ' ORDER BY fuente, mesa'
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(sql, params)
+                rows = cur.fetchall()
+        out = {'claveros': [], 'delegados': [], 'transmision': []}
+        for r in rows:
+            entry = {'nombre_archivo': r['nombre_archivo'], 'corporacion': r['corporacion'],
+                     'fuente': r['fuente'], 'path_token': _e14_pres_path_token(r['ruta_archivo'])}
+            out.setdefault(r['fuente'] or 'transmision', []).append(entry)
+        return jsonify({'success': True, 'data': out, 'total': sum(len(v) for v in out.values())})
+    except Exception as e:
+        logger.exception('[e14-pres/buscar]')
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/e14-pres/buscar-por-mesa', methods=['GET'])
+def e14_pres_buscar_por_mesa():
+    """Busca E14 PRES de una mesa específica (resuelve divipol desde idmesa)."""
+    err = _require_session()
+    if err: return err
+    try:
+        idmesa = request.args.get('idmesa', type=int)
+        if not idmesa:
+            return jsonify({'success': False, 'error': 'Falta idmesa'}), 400
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""SELECT d.coddepto, d.codmipio, d.codzona, d.codpuesto, dm.mesa
+                               FROM divipolmesa_presidencial_2026 dm
+                               JOIN divipol_presidencial_2026 d ON d.iddivipol=dm.iddivipol AND d.clase='P'
+                               WHERE dm.idmesa=%s LIMIT 1""", (idmesa,))
+                div = cur.fetchone()
+                if not div:
+                    return jsonify({'success': False, 'error': 'Mesa no encontrada en divipol'})
+                cur.execute("""SELECT ruta_archivo, fuente
+                               FROM e14_index_presidencial
+                               WHERE coddepto=%s AND codmipio=%s AND codzona=%s
+                                 AND codpuesto=%s AND mesa=%s
+                               ORDER BY CASE fuente WHEN 'claveros' THEN 1 WHEN 'delegados' THEN 2 ELSE 3 END
+                               LIMIT 1""",
+                            (str(div['coddepto']).zfill(2), str(div['codmipio']).zfill(3),
+                             str(div['codzona']).zfill(3), str(div['codpuesto']).zfill(2),
+                             str(div['mesa']).zfill(3)))
+                e14 = cur.fetchone()
+        if not e14:
+            return jsonify({'success': False, 'error': 'E14 PRES no encontrado para esta mesa'})
+        return jsonify({'success': True,
+                        'path_token': _e14_pres_path_token(e14['ruta_archivo']),
+                        'fuente': e14['fuente']})
+    except Exception as e:
+        logger.exception('[e14-pres/buscar-por-mesa]')
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/e14-pres/ver/<path_token>', methods=['GET'])
+def e14_pres_ver(path_token):
+    """Sirve un PDF E14 desde el repositorio."""
+    err = _require_session()
+    if err: return err
+    try:
+        rel = _e14_pres_decode_token(path_token)
+        ruta = os.path.normpath(os.path.join(E14_PRES_BASE_PATH, rel))
+        if not ruta.startswith(os.path.normpath(E14_PRES_BASE_PATH)):
+            return jsonify({'success': False, 'error': 'Ruta no permitida'}), 403
+        if not os.path.isfile(ruta):
+            return jsonify({'success': False, 'error': 'Archivo no encontrado'}), 404
+        from flask import send_file
+        resp = send_file(ruta, mimetype='application/pdf', conditional=True)
+        resp.headers['Cache-Control'] = 'public, max-age=86400'
+        resp.headers['Accept-Ranges'] = 'bytes'
+        return resp
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/e14-pres/pagina-imagen', methods=['GET'])
+def e14_pres_pagina_imagen():
+    """Extrae una página de un PDF E14 PRES como imagen PNG (base64). Requiere pdftoppm."""
+    err = _require_session()
+    if err: return err
+    try:
+        import subprocess, tempfile
+        token = request.args.get('path_token', '')
+        page = request.args.get('page', type=int)
+        if not token or not page:
+            return jsonify({'success': False, 'error': 'path_token y page requeridos'}), 400
+        rel = _e14_pres_decode_token(token)
+        ruta = os.path.normpath(os.path.join(E14_PRES_BASE_PATH, rel))
+        if not ruta.startswith(os.path.normpath(E14_PRES_BASE_PATH)):
+            return jsonify({'success': False, 'error': 'Ruta no permitida'}), 403
+        if not os.path.isfile(ruta):
+            return jsonify({'success': False, 'error': 'Archivo no encontrado'}), 404
+        with tempfile.TemporaryDirectory() as tmp:
+            prefix = os.path.join(tmp, 'page')
+            r = subprocess.run(
+                ['pdftoppm','-png','-f',str(page),'-l',str(page),'-r','200','-singlefile',ruta,prefix],
+                capture_output=True, timeout=30)
+            if r.returncode != 0:
+                return jsonify({'success': False, 'error': f'pdftoppm: {r.stderr.decode()[:200]}'}), 500
+            png = prefix + '.png'
+            if not os.path.exists(png):
+                return jsonify({'success': False, 'error': 'No se generó imagen'}), 500
+            with open(png, 'rb') as f: data = f.read()
+        return jsonify({'success': True,
+                        'imagen_base64': 'data:image/png;base64,' + _b64.b64encode(data).decode()})
+    except Exception as e:
+        logger.exception('[e14-pres/pagina-imagen]')
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/e14-pres/monitor/resumen', methods=['GET'])
+def e14_pres_monitor_resumen():
+    """Cobertura total nacional de E14 PRES."""
+    err = _require_session()
+    if err: return err
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT
+                      COUNT(DISTINCT dm.idmesa) AS total_mesas,
+                      COUNT(DISTINCT CASE WHEN e.id IS NOT NULL THEN dm.idmesa END) AS mesas_cubiertas,
+                      COUNT(DISTINCT e.id) AS total_e14,
+                      COUNT(DISTINCT CASE WHEN e.fuente='claveros'    THEN e.id END) AS claveros,
+                      COUNT(DISTINCT CASE WHEN e.fuente='delegados'   THEN e.id END) AS delegados,
+                      COUNT(DISTINCT CASE WHEN e.fuente='transmision' THEN e.id END) AS transmision
+                    FROM divipol_presidencial_2026 d
+                    JOIN divipolmesa_presidencial_2026 dm ON dm.iddivipol = d.iddivipol
+                    LEFT JOIN e14_index_presidencial e ON
+                        LPAD(d.coddepto::text,2,'0') = e.coddepto AND
+                        LPAD(d.codmipio::text,3,'0') = e.codmipio AND
+                        LPAD(d.codzona::text,3,'0')  = e.codzona  AND
+                        d.codpuesto = e.codpuesto AND
+                        LPAD(dm.mesa::text,3,'0') = e.mesa
+                    WHERE d.clase='P'
+                """)
+                row = cur.fetchone()
+        tm = row['total_mesas'] or 0
+        mc = row['mesas_cubiertas'] or 0
+        cobertura = round(mc/tm*100, 2) if tm > 0 else 0
+        return jsonify({'success': True, 'data': {
+            'total_mesas': tm, 'mesas_cubiertas': mc, 'total_e14': row['total_e14'] or 0,
+            'cobertura': cobertura,
+            'claveros': row['claveros'] or 0, 'delegados': row['delegados'] or 0,
+            'transmision': row['transmision'] or 0,
+            'ruta': E14_PRES_BASE_PATH,
+            'existe_ruta': os.path.isdir(E14_PRES_BASE_PATH),
+        }})
+    except Exception as e:
+        logger.exception('[e14-pres/monitor/resumen]')
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/e14-pres/monitor/por-depto', methods=['GET'])
+def e14_pres_monitor_depto():
+    """Cobertura por departamento."""
+    err = _require_session()
+    if err: return err
+    try:
+        fuente = request.args.get('fuente')
+        extra, params = '', []
+        if fuente:
+            extra = ' AND e.fuente = %s'
+            params.append(fuente)
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(f"""
+                    SELECT
+                      LPAD(d.coddepto::text,2,'0') AS coddepto,
+                      MAX(d.nomdepto) AS nomdepto,
+                      COUNT(DISTINCT dm.idmesa) AS mesas_esperadas,
+                      COUNT(DISTINCT CASE WHEN e.id IS NOT NULL THEN dm.idmesa END) AS mesas_cubiertas,
+                      COUNT(DISTINCT e.id) AS e14_recibidos,
+                      COUNT(DISTINCT CASE WHEN e.fuente='claveros'    THEN e.id END) AS claveros,
+                      COUNT(DISTINCT CASE WHEN e.fuente='delegados'   THEN e.id END) AS delegados,
+                      COUNT(DISTINCT CASE WHEN e.fuente='transmision' THEN e.id END) AS transmision
+                    FROM divipol_presidencial_2026 d
+                    JOIN divipolmesa_presidencial_2026 dm ON dm.iddivipol = d.iddivipol
+                    LEFT JOIN e14_index_presidencial e ON
+                        LPAD(d.coddepto::text,2,'0') = e.coddepto AND
+                        LPAD(d.codmipio::text,3,'0') = e.codmipio AND
+                        LPAD(d.codzona::text,3,'0')  = e.codzona  AND
+                        d.codpuesto = e.codpuesto AND
+                        LPAD(dm.mesa::text,3,'0') = e.mesa
+                        {extra}
+                    WHERE d.clase='P'
+                    GROUP BY d.coddepto
+                    ORDER BY d.coddepto
+                """, params)
+                rows = cur.fetchall()
+        return jsonify({'success': True, 'data': rows})
+    except Exception as e:
+        logger.exception('[e14-pres/monitor/por-depto]')
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 # ==================== COMISIONES ESCRUTINIO ====================
 
 @app.route('/api/comisiones-pres/cargar-excel', methods=['POST'])
@@ -2793,6 +3014,211 @@ def health():
         return jsonify({'success': True, 'db': 'ok', 'app': 'auditor-presidencial-2026'})
     except Exception as e:
         return jsonify({'success': False, 'db': 'error', 'error': str(e)}), 500
+
+# ==================== DASHBOARD MÉTRICAS ====================
+@app.route('/api/dashboard/metricas', methods=['GET'])
+def dashboard_metricas():
+    """Métricas globales para el dashboard: mesas, cobertura, evidencias, AGE, comisiones, top deptos y candidatos."""
+    err = _require_session()
+    if err: return err
+    try:
+        ultimo = _ultimo_dia_seguimiento()
+        expr = _build_ultimo_valor_expr(ultimo) if ultimo > 0 else '0'
+        out = {}
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                # ---- Mesas universo ----
+                cur.execute("SELECT COUNT(*) AS n FROM divipolmesa_presidencial_2026")
+                out['total_mesas'] = cur.fetchone()['n'] or 0
+
+                # ---- Preconteo: mesas distintas con votos ----
+                cur.execute("""SELECT COUNT(*) AS n FROM (
+                                 SELECT DISTINCT coddepto, codmipio, codzona, codpuesto, mesa
+                                 FROM preconteo_presidencial_2026 WHERE votos > 0
+                               ) t""")
+                out['mesas_preconteo'] = cur.fetchone()['n'] or 0
+
+                # ---- Escrutinio: mesas con al menos un día reportado ----
+                if ultimo > 0:
+                    cur.execute(f"""SELECT COUNT(DISTINCT idmesa) AS n
+                                    FROM seguimiento_escrutinio_presidencial_2026
+                                    WHERE {expr} > 0""")
+                    out['mesas_escrutinio'] = cur.fetchone()['n'] or 0
+                else:
+                    out['mesas_escrutinio'] = 0
+                out['ultimo_dia'] = ultimo
+
+                # ---- Evidencias ----
+                cur.execute("""SELECT
+                                 COUNT(*) AS total,
+                                 COUNT(DISTINCT idmesa) AS mesas,
+                                 COUNT(*) FILTER (WHERE tipo_formulario='E14') AS e14,
+                                 COUNT(*) FILTER (WHERE tipo_formulario='E24') AS e24,
+                                 COUNT(*) FILTER (WHERE tipo_formulario='NO_E14') AS no_e14,
+                                 COUNT(*) FILTER (WHERE tipo_formulario='SIN_EVIDENCIA') AS sin_ev,
+                                 COUNT(*) FILTER (WHERE tipo_formulario NOT IN ('E14','E24','NO_E14','SIN_EVIDENCIA')
+                                                  OR tipo_formulario IS NULL) AS otros
+                               FROM evidencias_presidencial_2026""")
+                r = cur.fetchone()
+                out['evidencias'] = {
+                    'total': r['total'] or 0, 'mesas': r['mesas'] or 0,
+                    'e14': r['e14'] or 0, 'e24': r['e24'] or 0,
+                    'no_e14': r['no_e14'] or 0, 'sin_ev': r['sin_ev'] or 0, 'otros': r['otros'] or 0
+                }
+
+                # ---- Investigaciones ----
+                cur.execute("""SELECT
+                                 COUNT(*) AS total,
+                                 COUNT(*) FILTER (WHERE estado_reclamacion='pendiente') AS pendientes,
+                                 COUNT(*) FILTER (WHERE estado_reclamacion='en_proceso') AS en_proceso,
+                                 COUNT(*) FILTER (WHERE estado_reclamacion='resuelta') AS resueltas,
+                                 COUNT(DISTINCT idmesa) AS mesas
+                               FROM investigaciones_presidencial_2026""")
+                r = cur.fetchone()
+                out['investigaciones'] = {
+                    'total': r['total'] or 0, 'pendientes': r['pendientes'] or 0,
+                    'en_proceso': r['en_proceso'] or 0, 'resueltas': r['resueltas'] or 0,
+                    'mesas': r['mesas'] or 0
+                }
+
+                # ---- AGE ----
+                cur.execute("""SELECT
+                                 COUNT(*) AS total,
+                                 COUNT(DISTINCT (coddepto, codmpio, zona, codpuesto, mesa)) AS mesas,
+                                 COUNT(*) FILTER (WHERE tiene_tachaduras = TRUE) AS tachaduras,
+                                 COUNT(*) FILTER (WHERE tiene_recuento = TRUE) AS recuento
+                               FROM age_presidencial_2026""")
+                r = cur.fetchone()
+                out['age'] = {
+                    'total': r['total'] or 0, 'mesas': r['mesas'] or 0,
+                    'tachaduras': r['tachaduras'] or 0, 'recuento': r['recuento'] or 0
+                }
+
+                # ---- Comisiones escrutadoras ----
+                cur.execute("""SELECT
+                                 COUNT(DISTINCT nombre_comision) AS total,
+                                 COUNT(DISTINCT tipo_comision) AS tipos
+                               FROM distribucion_comisiones_presidencial_2026""")
+                r = cur.fetchone()
+                out['comisiones'] = {'total': r['total'] or 0, 'tipos': r['tipos'] or 0}
+                cur.execute("""SELECT tipo_comision, COUNT(DISTINCT nombre_comision) AS c
+                               FROM distribucion_comisiones_presidencial_2026
+                               WHERE tipo_comision IS NOT NULL
+                               GROUP BY tipo_comision ORDER BY c DESC""")
+                out['comisiones_tipos'] = cur.fetchall()
+
+                # ---- E14 indexados ----
+                cur.execute("""SELECT
+                                 COUNT(*) AS total,
+                                 COUNT(*) FILTER (WHERE fuente='claveros') AS claveros,
+                                 COUNT(*) FILTER (WHERE fuente='delegados') AS delegados,
+                                 COUNT(*) FILTER (WHERE fuente='transmision') AS transmision,
+                                 COUNT(DISTINCT (coddepto, codmipio, codzona, codpuesto, mesa)) AS mesas
+                               FROM e14_index_presidencial""")
+                r = cur.fetchone()
+                out['e14'] = {
+                    'total': r['total'] or 0, 'mesas': r['mesas'] or 0,
+                    'claveros': r['claveros'] or 0, 'delegados': r['delegados'] or 0,
+                    'transmision': r['transmision'] or 0
+                }
+
+                # ---- Catálogo ----
+                cur.execute("SELECT COUNT(*) AS n FROM candidatos_presidencial_2026")
+                out['candidatos'] = cur.fetchone()['n'] or 0
+                cur.execute("SELECT COUNT(*) AS n FROM partidos_presidencial_2026")
+                out['partidos'] = cur.fetchone()['n'] or 0
+
+                # ---- Top departamentos por avance escrutinio ----
+                if ultimo > 0:
+                    cur.execute(f"""
+                        SELECT d.coddepto, MAX(d.nomdepto) AS nomdepto,
+                               COUNT(DISTINCT dm.idmesa) AS mesas_total,
+                               COUNT(DISTINCT CASE WHEN {expr} > 0 THEN dm.idmesa END) AS mesas_escr
+                        FROM divipol_presidencial_2026 d
+                        JOIN divipolmesa_presidencial_2026 dm ON dm.iddivipol = d.iddivipol
+                        LEFT JOIN seguimiento_escrutinio_presidencial_2026 s ON s.idmesa = dm.idmesa
+                        WHERE d.clase='P'
+                        GROUP BY d.coddepto
+                        ORDER BY d.coddepto
+                    """)
+                    out['top_deptos'] = cur.fetchall()
+                else:
+                    cur.execute("""SELECT d.coddepto, MAX(d.nomdepto) AS nomdepto,
+                                          COUNT(DISTINCT dm.idmesa) AS mesas_total,
+                                          0 AS mesas_escr
+                                   FROM divipol_presidencial_2026 d
+                                   JOIN divipolmesa_presidencial_2026 dm ON dm.iddivipol = d.iddivipol
+                                   WHERE d.clase='P' GROUP BY d.coddepto ORDER BY d.coddepto""")
+                    out['top_deptos'] = cur.fetchall()
+
+                # ---- Top candidatos por votos (último día escrutinio o preconteo) ----
+                if ultimo > 0:
+                    cur.execute(f"""
+                        SELECT s.codcandidato,
+                               (SELECT nomcandidato FROM candidatos_presidencial_2026 WHERE codcandidato=s.codcandidato LIMIT 1) AS nomcandidato,
+                               (SELECT nompartido FROM partidos_presidencial_2026 WHERE codpartido=s.codpartido LIMIT 1) AS nompartido,
+                               SUM({expr}) AS votos
+                        FROM seguimiento_escrutinio_presidencial_2026 s
+                        WHERE s.codcandidato NOT IN (996,997,998)
+                        GROUP BY s.codcandidato, s.codpartido
+                        ORDER BY votos DESC NULLS LAST LIMIT 15
+                    """)
+                    out['top_candidatos'] = cur.fetchall()
+                    out['fuente_top'] = f'Escrutinio día {ultimo}'
+                else:
+                    cur.execute("""
+                        SELECT p.codcandidato,
+                               (SELECT nomcandidato FROM candidatos_presidencial_2026 WHERE codcandidato=p.codcandidato LIMIT 1) AS nomcandidato,
+                               (SELECT nompartido FROM partidos_presidencial_2026 WHERE codpartido=p.codpartido LIMIT 1) AS nompartido,
+                               SUM(p.votos) AS votos
+                        FROM preconteo_presidencial_2026 p
+                        WHERE p.codcandidato NOT IN (996,997,998)
+                        GROUP BY p.codcandidato, p.codpartido
+                        ORDER BY votos DESC NULLS LAST LIMIT 15
+                    """)
+                    out['top_candidatos'] = cur.fetchall()
+                    out['fuente_top'] = 'Preconteo'
+
+                # ---- Votos especiales totales (último día) ----
+                if ultimo > 0:
+                    cur.execute(f"""SELECT
+                                      SUM(CASE WHEN codcandidato=996 THEN {expr} ELSE 0 END) AS blanco,
+                                      SUM(CASE WHEN codcandidato=997 THEN {expr} ELSE 0 END) AS nulo,
+                                      SUM(CASE WHEN codcandidato=998 THEN {expr} ELSE 0 END) AS no_marcado
+                                    FROM seguimiento_escrutinio_presidencial_2026""")
+                else:
+                    cur.execute("""SELECT
+                                     SUM(CASE WHEN codcandidato=996 THEN votos ELSE 0 END) AS blanco,
+                                     SUM(CASE WHEN codcandidato=997 THEN votos ELSE 0 END) AS nulo,
+                                     SUM(CASE WHEN codcandidato=998 THEN votos ELSE 0 END) AS no_marcado
+                                   FROM preconteo_presidencial_2026""")
+                r = cur.fetchone()
+                out['especiales'] = {
+                    'blanco': int(r['blanco'] or 0), 'nulo': int(r['nulo'] or 0),
+                    'no_marcado': int(r['no_marcado'] or 0)
+                }
+
+                # ---- Días de seguimiento (cuántos días procesados) ----
+                cur.execute("SELECT COUNT(*) AS n FROM dias_escrutinio_presidencial WHERE procesado=TRUE")
+                out['dias_procesados'] = cur.fetchone()['n'] or 0
+
+                # ---- Usuarios activos (sesiones / hardcoded skip) ----
+                cur.execute("SELECT COUNT(*) AS n FROM usuarios")
+                out['usuarios'] = cur.fetchone()['n'] or 0
+
+        # Calcular porcentajes
+        tm = out['total_mesas'] or 1
+        out['cobertura_preconteo'] = round(out['mesas_preconteo'] * 100.0 / tm, 2)
+        out['cobertura_escrutinio'] = round(out['mesas_escrutinio'] * 100.0 / tm, 2)
+        out['cobertura_evidencias'] = round(out['evidencias']['mesas'] * 100.0 / tm, 2)
+        out['cobertura_e14'] = round(out['e14']['mesas'] * 100.0 / tm, 2)
+        out['cobertura_age'] = round(out['age']['mesas'] * 100.0 / tm, 2)
+
+        return jsonify({'success': True, 'data': out, 'ts': int(_time_mod.time())})
+    except Exception as e:
+        logger.exception('[dashboard/metricas]')
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 
 # ==================== MAIN ====================
 if __name__ == '__main__':

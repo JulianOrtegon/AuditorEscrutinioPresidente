@@ -94,6 +94,7 @@
     <nav class="sidebar">
       <div class="group-title">Inicio</div>
       <a href="#" onclick="cambiarModulo('mod-home', this); return false;" class="active">🏠 Tablero</a>
+      <a href="#" onclick="cambiarModulo('mod-dashboard', this); dashboardInit(); return false;">📊 Dashboard <span class="badge" style="background:linear-gradient(135deg,#f59e0b,#ef4444);color:#fff">EN VIVO</span></a>
 
       <div class="group-title">Cargues</div>
       <a href="#" onclick="cambiarModulo('mod-divipol', this); divipolInit(); return false;">🗺️ Divipol <span class="badge" style="background:#dcfce7;color:#166534">listo</span></a>
@@ -105,7 +106,7 @@
       <a href="#" onclick="cambiarModulo('mod-consulta-escrutinio', this); ceeInit(); return false;">🔎 Consulta Votación Escrutinio <span class="badge" style="background:#dcfce7;color:#166534">listo</span></a>
 
       <div class="group-title">Visores</div>
-      <a href="#" onclick="cambiarModulo('mod-visor-e14', this); return false;">📄 Visor E14 <span class="badge">por hacer</span></a>
+      <a href="#" onclick="cambiarModulo('mod-visor-e14', this); e14presInit(); return false;">📄 Visor E14 <span class="badge" style="background:#dcfce7;color:#166534">listo</span></a>
       <a href="#" onclick="cambiarModulo('mod-visor-e24', this); return false;">📄 Visor E24 <span class="badge">por hacer</span></a>
 
       <div class="group-title">Análisis</div>
@@ -123,6 +124,152 @@
           <p style="margin-top:8px;color:#666;font-size:14px;">
             Los módulos se irán activando a medida que se construyan. Empezar por Divipol.
           </p>
+        </div>
+      </div>
+
+      <!-- ============== DASHBOARD ============== -->
+      <div id="mod-dashboard" class="module">
+        <style>
+          .dash-hero { background: linear-gradient(135deg,#1e3a8a 0%,#7c3aed 50%,#ec4899 100%);
+                       color:#fff; padding:24px; border-radius:16px; margin-bottom:18px;
+                       box-shadow:0 8px 30px rgba(124,58,237,0.35); position:relative; overflow:hidden; }
+          .dash-hero::before { content:''; position:absolute; top:-50%; right:-20%; width:400px; height:400px;
+                       background:radial-gradient(circle, rgba(255,255,255,0.15), transparent 70%);
+                       animation: dashPulse 4s ease-in-out infinite; }
+          @keyframes dashPulse { 0%,100%{transform:scale(1);opacity:.6} 50%{transform:scale(1.2);opacity:1} }
+          .dash-hero h2 { margin:0 0 6px; font-size:1.8em; color:#fff; }
+          .dash-hero .sub { opacity:.9; font-size:.95em; }
+          .dash-hero .live { display:inline-block; margin-left:10px; padding:3px 10px; border-radius:12px;
+                       background:rgba(239,68,68,0.95); font-size:.7em; font-weight:bold; letter-spacing:1px;
+                       animation: dashBlink 1.4s ease-in-out infinite; }
+          @keyframes dashBlink { 0%,100%{opacity:1} 50%{opacity:.45} }
+
+          .dash-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:14px; margin-bottom:18px; }
+          .dash-card { padding:18px; border-radius:14px; color:#fff; position:relative; overflow:hidden;
+                       box-shadow:0 4px 16px rgba(0,0,0,0.12); transition:transform .25s ease, box-shadow .25s ease;
+                       animation: dashFadeUp .6s ease-out backwards; }
+          .dash-card:hover { transform:translateY(-4px); box-shadow:0 10px 30px rgba(0,0,0,0.22); }
+          .dash-card::after { content:''; position:absolute; right:-30px; top:-30px; width:130px; height:130px;
+                       background:rgba(255,255,255,0.12); border-radius:50%; transition:transform .5s ease; }
+          .dash-card:hover::after { transform:scale(1.4); }
+          @keyframes dashFadeUp { from{opacity:0; transform:translateY(20px)} to{opacity:1; transform:translateY(0)} }
+          .dash-card .icon { font-size:1.8em; opacity:.9; margin-bottom:6px; }
+          .dash-card .label { font-size:.78em; text-transform:uppercase; letter-spacing:1px; opacity:.85; }
+          .dash-card .value { font-size:2.4em; font-weight:bold; margin:4px 0; line-height:1;
+                       text-shadow:0 2px 8px rgba(0,0,0,0.2); }
+          .dash-card .sub-value { font-size:.85em; opacity:.85; }
+          .dash-card.c1 { background:linear-gradient(135deg,#3b82f6,#1e40af); }
+          .dash-card.c2 { background:linear-gradient(135deg,#10b981,#047857); }
+          .dash-card.c3 { background:linear-gradient(135deg,#f59e0b,#b45309); }
+          .dash-card.c4 { background:linear-gradient(135deg,#ec4899,#be185d); }
+          .dash-card.c5 { background:linear-gradient(135deg,#8b5cf6,#5b21b6); }
+          .dash-card.c6 { background:linear-gradient(135deg,#06b6d4,#0e7490); }
+          .dash-card.c7 { background:linear-gradient(135deg,#ef4444,#991b1b); }
+          .dash-card.c8 { background:linear-gradient(135deg,#22c55e,#15803d); }
+
+          .dash-prog { height:8px; background:rgba(255,255,255,0.25); border-radius:4px; overflow:hidden; margin-top:8px; }
+          .dash-prog-fill { height:100%; background:rgba(255,255,255,0.92); width:0; border-radius:4px;
+                       transition:width 1.2s cubic-bezier(.2,.8,.2,1); position:relative; }
+          .dash-prog-fill::after { content:''; position:absolute; top:0; left:0; right:0; bottom:0;
+                       background:linear-gradient(90deg, transparent, rgba(255,255,255,0.6), transparent);
+                       animation: dashShimmer 2s linear infinite; }
+          @keyframes dashShimmer { 0%{transform:translateX(-100%)} 100%{transform:translateX(100%)} }
+
+          .dash-section { background:#fff; border-radius:14px; padding:18px; box-shadow:0 2px 10px rgba(0,0,0,0.06);
+                       margin-bottom:14px; }
+          .dash-section h3 { margin:0 0 14px; color:#1f2937; display:flex; align-items:center; gap:8px; }
+          .dash-section h3 .pill { background:#eef2ff; color:#4338ca; font-size:.65em; padding:2px 10px;
+                       border-radius:10px; font-weight:600; }
+
+          .dash-bar { display:flex; align-items:center; gap:10px; padding:6px 0; font-size:.9em; }
+          .dash-bar .name { flex:0 0 180px; font-weight:600; color:#374151; }
+          .dash-bar .track { flex:1; height:18px; background:#f3f4f6; border-radius:9px; overflow:hidden; position:relative; }
+          .dash-bar .fill { height:100%; border-radius:9px; transition:width 1s cubic-bezier(.2,.8,.2,1);
+                       background:linear-gradient(90deg,#3b82f6,#8b5cf6); display:flex; align-items:center;
+                       justify-content:flex-end; padding-right:6px; color:#fff; font-size:.75em; font-weight:bold; }
+          .dash-bar .val { flex:0 0 90px; text-align:right; color:#111827; font-weight:600; font-family:monospace; }
+
+          .dash-cand { display:grid; grid-template-columns:30px 1fr 90px; gap:10px; align-items:center; padding:8px 0;
+                       border-bottom:1px solid #f3f4f6; }
+          .dash-cand .rank { font-weight:bold; color:#9ca3af; text-align:center; }
+          .dash-cand .info b { color:#1f2937; }
+          .dash-cand .info small { display:block; color:#6b7280; }
+          .dash-cand .votos { text-align:right; font-weight:bold; color:#1e40af; font-family:monospace; font-size:1.05em; }
+          .dash-cand:nth-child(1) .rank { color:#fbbf24; font-size:1.3em; }
+          .dash-cand:nth-child(2) .rank { color:#d1d5db; font-size:1.2em; }
+          .dash-cand:nth-child(3) .rank { color:#d97706; font-size:1.1em; }
+
+          .dash-chip { display:inline-flex; align-items:center; gap:6px; padding:6px 14px; border-radius:20px;
+                       font-size:.85em; font-weight:600; margin:3px; }
+          .dash-chip.b1 { background:#dbeafe; color:#1e3a8a; }
+          .dash-chip.b2 { background:#dcfce7; color:#166534; }
+          .dash-chip.b3 { background:#fef3c7; color:#92400e; }
+          .dash-chip.b4 { background:#fce7f3; color:#9d174d; }
+          .dash-chip.b5 { background:#ede9fe; color:#5b21b6; }
+
+          .dash-depto-row { display:grid; grid-template-columns:50px 1fr 70px 60px; gap:8px; padding:7px 0;
+                       align-items:center; border-bottom:1px solid #f3f4f6; font-size:.88em; }
+          .dash-depto-row b { font-family:monospace; color:#6b7280; }
+          .dash-depto-row .nm { color:#111827; }
+          .dash-depto-row .ct { font-family:monospace; text-align:right; color:#374151; }
+          .dash-depto-row .pc { text-align:right; font-weight:bold; padding:2px 6px; border-radius:6px; font-size:.85em; }
+          .dash-depto-row .pc.hi { background:#dcfce7; color:#166534; }
+          .dash-depto-row .pc.mid { background:#fef3c7; color:#92400e; }
+          .dash-depto-row .pc.lo { background:#fee2e2; color:#991b1b; }
+
+          .dash-toolbar { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; }
+          .dash-ts { font-size:.8em; color:#6b7280; font-family:monospace; }
+          .dash-spinner { display:inline-block; width:14px; height:14px; border:2px solid #e5e7eb;
+                       border-top-color:#3b82f6; border-radius:50%; animation:dashSpin .8s linear infinite; }
+          @keyframes dashSpin { to{transform:rotate(360deg)} }
+        </style>
+
+        <div class="dash-hero">
+          <h2>📊 Dashboard — Auditor Presidencial 2026 <span class="live">● EN VIVO</span></h2>
+          <div class="sub">Indicadores agregados en tiempo real. Auto-refresco cada 30 segundos.</div>
+        </div>
+
+        <div class="dash-toolbar">
+          <div class="dash-ts" id="dash-ts">— sin datos aún —</div>
+          <div>
+            <button class="btn" onclick="dashboardRefrescar()">🔄 Refrescar ahora</button>
+            <label style="margin-left:10px;font-size:.85em">
+              <input type="checkbox" id="dash-auto" checked /> Auto
+            </label>
+          </div>
+        </div>
+
+        <div class="dash-grid" id="dash-cards"></div>
+
+        <div class="dash-section">
+          <h3>📈 Cobertura por proceso <span class="pill">% sobre mesas totales</span></h3>
+          <div id="dash-coberturas"></div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:14px">
+          <div class="dash-section">
+            <h3>🏆 Top candidatos <span class="pill" id="dash-fuente">—</span></h3>
+            <div id="dash-top-cand"></div>
+          </div>
+          <div class="dash-section">
+            <h3>📎 Evidencias por tipo</h3>
+            <div id="dash-ev-chips" style="margin-bottom:10px"></div>
+            <div id="dash-ev-bars"></div>
+          </div>
+          <div class="dash-section">
+            <h3>🔍 Investigaciones</h3>
+            <div id="dash-inv-chips" style="margin-bottom:10px"></div>
+            <div id="dash-inv-bars"></div>
+          </div>
+          <div class="dash-section">
+            <h3>🏛️ Comisiones por tipo</h3>
+            <div id="dash-com-chips"></div>
+          </div>
+        </div>
+
+        <div class="dash-section">
+          <h3>🗺️ Avance escrutinio por departamento</h3>
+          <div id="dash-deptos"></div>
         </div>
       </div>
 
@@ -530,7 +677,66 @@
         </div>
       </div>
 
-      <div id="mod-visor-e14" class="module"><div class="card"><h2>📄 Visor E14</h2><div class="placeholder">Por hacer.</div></div></div>
+      <div id="mod-visor-e14" class="module">
+        <div class="card">
+          <h2>📄 Visor E14 — Presidencial 2026</h2>
+          <div id="e14p-banner" style="margin-bottom:10px;padding:10px;border-radius:6px;font-size:0.85em"></div>
+          <div class="filters-grid">
+            <div class="filter-group">
+              <label>Departamento</label>
+              <select id="e14p-depto"><option value="">— Todos —</option></select>
+            </div>
+            <div class="filter-group">
+              <label>Municipio</label>
+              <select id="e14p-mipio" disabled><option value="">— Seleccione depto —</option></select>
+            </div>
+            <div class="filter-group">
+              <label>Zona</label>
+              <select id="e14p-zona" disabled><option value="">— Todas —</option></select>
+            </div>
+            <div class="filter-group">
+              <label>Puesto</label>
+              <select id="e14p-puesto" disabled><option value="">— Todos —</option></select>
+            </div>
+            <div class="filter-group">
+              <label>Mesa (opcional)</label>
+              <input type="text" id="e14p-mesa" placeholder="Ej: 001" maxlength="3" />
+            </div>
+            <div class="filter-group" style="display:flex;align-items:flex-end;gap:8px">
+              <button class="btn" onclick="e14presBuscar()">🔎 Buscar E14</button>
+              <button class="btn" style="background:#6b7280" onclick="e14presResetFiltros()">Limpiar</button>
+            </div>
+          </div>
+          <div id="e14p-msg" style="margin-top:8px"></div>
+        </div>
+
+        <div class="card">
+          <h3>Resultados</h3>
+          <div id="e14p-resultados"><p style="color:#666;font-style:italic">Seleccione filtros y presione "Buscar E14".</p></div>
+        </div>
+
+        <div class="card" id="e14p-viewer-card" style="display:none">
+          <h3 id="e14p-viewer-title">Visor</h3>
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+            <button class="btn" style="background:#6b7280" onclick="e14presPagAnt()">◀</button>
+            <span>Página <input id="e14p-pag-num" type="number" value="1" min="1" style="width:60px;text-align:center" onchange="e14presIrPagina()"/> / <span id="e14p-pag-total">?</span></span>
+            <button class="btn" style="background:#6b7280" onclick="e14presPagSig()">▶</button>
+            <button class="btn" onclick="e14presDescargar()">⬇️ Descargar PDF</button>
+            <button class="btn" style="background:#dc2626" onclick="e14presCerrarVisor()">✖ Cerrar</button>
+          </div>
+          <div id="e14p-img-container" style="text-align:center;background:#f1f5f9;padding:10px;border-radius:6px;min-height:400px">
+            <div id="e14p-img-loading" style="padding:40px;color:#666">Cargando imagen...</div>
+            <img id="e14p-img" style="max-width:100%;display:none" />
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>📊 Monitor de cobertura</h3>
+          <div id="e14p-resumen" style="margin-bottom:10px"></div>
+          <button class="btn" style="background:#6b7280" onclick="e14presCargarMonitor()">🔄 Refrescar</button>
+          <div id="e14p-monitor-tabla" style="margin-top:10px"></div>
+        </div>
+      </div>
       <div id="mod-visor-e24" class="module"><div class="card"><h2>📄 Visor E24</h2><div class="placeholder">Por hacer.</div></div></div>
       <div id="mod-investigaciones" class="module">
         <!-- Comparar 2 candidatos -->
@@ -2972,6 +3178,404 @@ async function escEliminarUno(nombre, facceso) {
   const j = await res.json();
   if (j.success) { escCargarHistorial(); escCargarEstadoDia(); }
   else { alert('Error: ' + j.error); }
+}
+
+// ===================== MÓDULO DASHBOARD =====================
+let dashTimer = null;
+let dashLastData = null;
+
+async function dashboardInit() {
+  await dashboardRefrescar();
+  if (dashTimer) clearInterval(dashTimer);
+  dashTimer = setInterval(() => {
+    if (document.getElementById('dash-auto')?.checked &&
+        document.getElementById('mod-dashboard')?.classList.contains('active')) {
+      dashboardRefrescar();
+    }
+  }, 30000);
+}
+
+function dashAnimNum(el, valFinal, dur = 900, suffix = '') {
+  if (!el) return;
+  const from = parseFloat(el.dataset.cur || '0') || 0;
+  const to = Number(valFinal) || 0;
+  const t0 = performance.now();
+  const isFloat = !Number.isInteger(to) || suffix === '%';
+  function step(t) {
+    const p = Math.min(1, (t - t0) / dur);
+    const eased = 1 - Math.pow(1 - p, 3);
+    const cur = from + (to - from) * eased;
+    el.textContent = (isFloat ? cur.toFixed(1) : Math.round(cur).toLocaleString('es-CO')) + suffix;
+    if (p < 1) requestAnimationFrame(step);
+    else el.dataset.cur = to;
+  }
+  requestAnimationFrame(step);
+}
+
+async function dashboardRefrescar() {
+  const tsEl = document.getElementById('dash-ts');
+  if (tsEl) tsEl.innerHTML = '<span class="dash-spinner"></span> Cargando métricas...';
+  try {
+    const r = await fetchJSON('/api/dashboard/metricas');
+    if (!r.data.success) {
+      if (tsEl) tsEl.innerHTML = '❌ ' + r.data.error;
+      return;
+    }
+    dashLastData = r.data.data;
+    dashboardRender(dashLastData);
+    if (tsEl) tsEl.textContent = '✓ Actualizado: ' + new Date().toLocaleTimeString('es-CO');
+  } catch (e) {
+    if (tsEl) tsEl.textContent = '❌ Error: ' + e.message;
+  }
+}
+
+function dashboardRender(d) {
+  const cards = [
+    { c:'c1', icon:'🗳️', label:'Mesas totales', value:d.total_mesas, sub:`${(d.candidatos||0)} candidatos · ${(d.partidos||0)} partidos` },
+    { c:'c2', icon:'📥', label:'Mesas con preconteo', value:d.mesas_preconteo, pct:d.cobertura_preconteo, sub:'Reportadas en MMV preconteo' },
+    { c:'c3', icon:'📑', label:'Mesas con escrutinio', value:d.mesas_escrutinio, pct:d.cobertura_escrutinio, sub:`Día ${d.ultimo_dia||0} · ${d.dias_procesados||0} día(s) procesado(s)` },
+    { c:'c4', icon:'📎', label:'Evidencias cargadas', value:d.evidencias.total, sub:`${d.evidencias.mesas.toLocaleString('es-CO')} mesas (${d.cobertura_evidencias||0}%)` },
+    { c:'c5', icon:'🔍', label:'Investigaciones', value:d.investigaciones.total, sub:`${d.investigaciones.pendientes} pendientes · ${d.investigaciones.resueltas} resueltas` },
+    { c:'c6', icon:'📋', label:'Observaciones AGE', value:d.age.total, sub:`${d.age.mesas.toLocaleString('es-CO')} mesas (${d.cobertura_age||0}%)` },
+    { c:'c7', icon:'🏛️', label:'Comisiones escrutadoras', value:d.comisiones.total, sub:`${d.comisiones.tipos} tipo(s)` },
+    { c:'c8', icon:'📄', label:'E14 indexados', value:d.e14.total, sub:`${d.e14.mesas.toLocaleString('es-CO')} mesas (${d.cobertura_e14||0}%)` },
+  ];
+  const cont = document.getElementById('dash-cards');
+  if (cont.children.length !== cards.length) {
+    cont.innerHTML = cards.map((c,i) => `
+      <div class="dash-card ${c.c}" style="animation-delay:${i*0.06}s">
+        <div class="icon">${c.icon}</div>
+        <div class="label">${c.label}</div>
+        <div class="value" data-key="${i}">0</div>
+        <div class="sub-value" data-sub="${i}">${c.sub}</div>
+        ${c.pct !== undefined ? `<div class="dash-prog"><div class="dash-prog-fill" data-pct="${i}"></div></div>` : ''}
+      </div>`).join('');
+  }
+  cards.forEach((c,i) => {
+    dashAnimNum(cont.querySelector(`[data-key="${i}"]`), c.value);
+    const sub = cont.querySelector(`[data-sub="${i}"]`); if (sub) sub.textContent = c.sub;
+    if (c.pct !== undefined) {
+      const f = cont.querySelector(`[data-pct="${i}"]`);
+      if (f) setTimeout(() => { f.style.width = Math.min(100, c.pct) + '%'; }, 100 + i*60);
+    }
+  });
+
+  // Cobertura general
+  const cov = [
+    { name:'Preconteo',    pct:d.cobertura_preconteo,  abs:d.mesas_preconteo,        col:'linear-gradient(90deg,#10b981,#06b6d4)' },
+    { name:'Escrutinio',   pct:d.cobertura_escrutinio, abs:d.mesas_escrutinio,       col:'linear-gradient(90deg,#f59e0b,#ef4444)' },
+    { name:'Evidencias',   pct:d.cobertura_evidencias, abs:d.evidencias.mesas,       col:'linear-gradient(90deg,#ec4899,#8b5cf6)' },
+    { name:'E14 indexados',pct:d.cobertura_e14,        abs:d.e14.mesas,              col:'linear-gradient(90deg,#3b82f6,#1e40af)' },
+    { name:'AGE',          pct:d.cobertura_age,        abs:d.age.mesas,              col:'linear-gradient(90deg,#22c55e,#0d9488)' },
+  ];
+  document.getElementById('dash-coberturas').innerHTML = cov.map((x,i) => `
+    <div class="dash-bar">
+      <div class="name">${x.name}</div>
+      <div class="track"><div class="fill" style="background:${x.col};width:0" data-w="${Math.min(100,x.pct)}">${x.pct}%</div></div>
+      <div class="val">${(x.abs||0).toLocaleString('es-CO')}</div>
+    </div>`).join('');
+  setTimeout(() => {
+    document.querySelectorAll('#dash-coberturas .fill').forEach(el => {
+      el.style.width = (el.dataset.w || 0) + '%';
+    });
+  }, 50);
+
+  // Top candidatos
+  document.getElementById('dash-fuente').textContent = d.fuente_top || '';
+  const tot = (d.top_candidatos || []).reduce((s,x) => s + (Number(x.votos)||0), 0) || 1;
+  document.getElementById('dash-top-cand').innerHTML = (d.top_candidatos || []).slice(0,10).map((c,i) => {
+    const v = Number(c.votos) || 0;
+    const pct = (v / tot * 100).toFixed(1);
+    return `<div class="dash-cand">
+      <div class="rank">${i===0?'🥇':i===1?'🥈':i===2?'🥉':(i+1)}</div>
+      <div class="info"><b>${c.nomcandidato || ('Cod ' + c.codcandidato)}</b><small>${c.nompartido || ''} · ${pct}%</small></div>
+      <div class="votos">${v.toLocaleString('es-CO')}</div>
+    </div>`;
+  }).join('') || '<p style="color:#999;font-style:italic">Sin datos</p>';
+
+  // Evidencias por tipo
+  const ev = d.evidencias;
+  document.getElementById('dash-ev-chips').innerHTML =
+    `<span class="dash-chip b1">📄 E14: ${ev.e14.toLocaleString('es-CO')}</span>
+     <span class="dash-chip b2">📑 E24: ${ev.e24.toLocaleString('es-CO')}</span>
+     <span class="dash-chip b3">⚠️ NO_E14: ${ev.no_e14.toLocaleString('es-CO')}</span>
+     <span class="dash-chip b4">∅ SIN_EV: ${ev.sin_ev.toLocaleString('es-CO')}</span>
+     <span class="dash-chip b5">📦 Otros: ${ev.otros.toLocaleString('es-CO')}</span>`;
+  const evT = Math.max(1, ev.total);
+  const evBars = [
+    { n:'E14', v:ev.e14, col:'linear-gradient(90deg,#3b82f6,#1e40af)' },
+    { n:'E24', v:ev.e24, col:'linear-gradient(90deg,#10b981,#047857)' },
+    { n:'NO_E14', v:ev.no_e14, col:'linear-gradient(90deg,#f59e0b,#b45309)' },
+    { n:'SIN_EVIDENCIA', v:ev.sin_ev, col:'linear-gradient(90deg,#ec4899,#9d174d)' },
+    { n:'Otros', v:ev.otros, col:'linear-gradient(90deg,#8b5cf6,#5b21b6)' },
+  ];
+  document.getElementById('dash-ev-bars').innerHTML = evBars.map(x => `
+    <div class="dash-bar">
+      <div class="name" style="flex:0 0 130px">${x.n}</div>
+      <div class="track"><div class="fill" style="background:${x.col};width:0" data-w="${(x.v/evT*100).toFixed(1)}">${(x.v/evT*100).toFixed(0)}%</div></div>
+      <div class="val">${x.v.toLocaleString('es-CO')}</div>
+    </div>`).join('');
+  setTimeout(() => document.querySelectorAll('#dash-ev-bars .fill').forEach(el => el.style.width = el.dataset.w + '%'), 50);
+
+  // Investigaciones
+  const inv = d.investigaciones;
+  document.getElementById('dash-inv-chips').innerHTML =
+    `<span class="dash-chip b3">⏳ Pendientes: ${inv.pendientes}</span>
+     <span class="dash-chip b1">🔄 En proceso: ${inv.en_proceso}</span>
+     <span class="dash-chip b2">✓ Resueltas: ${inv.resueltas}</span>
+     <span class="dash-chip b5">📊 Mesas: ${inv.mesas.toLocaleString('es-CO')}</span>`;
+  const invT = Math.max(1, inv.total);
+  const invBars = [
+    { n:'Pendientes', v:inv.pendientes, col:'linear-gradient(90deg,#f59e0b,#b45309)' },
+    { n:'En proceso', v:inv.en_proceso, col:'linear-gradient(90deg,#3b82f6,#1e40af)' },
+    { n:'Resueltas',  v:inv.resueltas,  col:'linear-gradient(90deg,#10b981,#047857)' },
+  ];
+  document.getElementById('dash-inv-bars').innerHTML = invBars.map(x => `
+    <div class="dash-bar">
+      <div class="name" style="flex:0 0 130px">${x.n}</div>
+      <div class="track"><div class="fill" style="background:${x.col};width:0" data-w="${(x.v/invT*100).toFixed(1)}">${(x.v/invT*100).toFixed(0)}%</div></div>
+      <div class="val">${x.v.toLocaleString('es-CO')}</div>
+    </div>`).join('');
+  setTimeout(() => document.querySelectorAll('#dash-inv-bars .fill').forEach(el => el.style.width = el.dataset.w + '%'), 50);
+
+  // Comisiones por tipo
+  const palette = ['b1','b2','b3','b4','b5'];
+  document.getElementById('dash-com-chips').innerHTML = (d.comisiones_tipos || []).map((t,i) =>
+    `<span class="dash-chip ${palette[i%palette.length]}">${t.tipo_comision}: ${t.c}</span>`).join('') ||
+    '<p style="color:#999;font-style:italic">Sin datos</p>';
+
+  // Top deptos
+  document.getElementById('dash-deptos').innerHTML = (d.top_deptos || []).map(x => {
+    const pct = x.mesas_total ? Math.round((x.mesas_escr||0)/x.mesas_total*100) : 0;
+    const cls = pct >= 70 ? 'hi' : pct >= 30 ? 'mid' : 'lo';
+    return `<div class="dash-depto-row">
+      <b>${String(x.coddepto).padStart(2,'0')}</b>
+      <div class="nm">${x.nomdepto || ''}</div>
+      <div class="ct">${(x.mesas_escr||0).toLocaleString('es-CO')} / ${(x.mesas_total||0).toLocaleString('es-CO')}</div>
+      <div class="pc ${cls}">${pct}%</div>
+    </div>`;
+  }).join('') || '<p style="color:#999;font-style:italic">Sin datos</p>';
+}
+
+// ===================== MÓDULO VISOR E14 PRESIDENCIAL =====================
+let e14pInit_done = false;
+let e14pCurrent = { token: null, pagina: 1, total: null, nombre: '' };
+let e14pDivipolCache = null;
+
+async function e14presInit() {
+  if (e14pInit_done) return;
+  e14pInit_done = true;
+  await e14presCargarDivipol();
+  await e14presCargarMonitor();
+}
+
+async function e14presCargarDivipol() {
+  try {
+    const r = await fetchJSON('/api/divipol/departamentos');
+    const sel = document.getElementById('e14p-depto');
+    sel.innerHTML = '<option value="">— Todos —</option>';
+    (r.data.data || []).forEach(d => {
+      const opt = document.createElement('option');
+      opt.value = d.coddepto;
+      opt.textContent = `${String(d.coddepto).padStart(2,'0')} - ${d.nomdepto}`;
+      sel.appendChild(opt);
+    });
+    sel.onchange = e14presOnDepto;
+    document.getElementById('e14p-mipio').onchange = e14presOnMipio;
+    document.getElementById('e14p-zona').onchange = e14presOnZona;
+  } catch (e) { console.error('[e14p] cargarDivipol', e); }
+}
+
+async function e14presOnDepto() {
+  const cd = document.getElementById('e14p-depto').value;
+  const sm = document.getElementById('e14p-mipio');
+  sm.innerHTML = '<option value="">— Todos —</option>'; sm.disabled = !cd;
+  document.getElementById('e14p-zona').innerHTML = '<option value="">— Todas —</option>';
+  document.getElementById('e14p-zona').disabled = true;
+  document.getElementById('e14p-puesto').innerHTML = '<option value="">— Todos —</option>';
+  document.getElementById('e14p-puesto').disabled = true;
+  if (!cd) return;
+  const r = await fetchJSON('/api/divipol/municipios?coddepto=' + cd);
+  (r.data.data || []).forEach(m => {
+    const o = document.createElement('option');
+    o.value = m.codmipio; o.textContent = `${String(m.codmipio).padStart(3,'0')} - ${m.nommipio}`;
+    sm.appendChild(o);
+  });
+}
+
+async function e14presOnMipio() {
+  const cd = document.getElementById('e14p-depto').value;
+  const cm = document.getElementById('e14p-mipio').value;
+  const sz = document.getElementById('e14p-zona');
+  sz.innerHTML = '<option value="">— Todas —</option>'; sz.disabled = !cm;
+  document.getElementById('e14p-puesto').innerHTML = '<option value="">— Todos —</option>';
+  document.getElementById('e14p-puesto').disabled = true;
+  if (!cm) return;
+  const r = await fetchJSON(`/api/divipol/zonas?coddepto=${cd}&codmipio=${cm}`);
+  (r.data.data || []).forEach(z => {
+    const o = document.createElement('option');
+    o.value = z.codzona; o.textContent = String(z.codzona).padStart(3,'0');
+    sz.appendChild(o);
+  });
+}
+
+async function e14presOnZona() {
+  const cd = document.getElementById('e14p-depto').value;
+  const cm = document.getElementById('e14p-mipio').value;
+  const cz = document.getElementById('e14p-zona').value;
+  const sp = document.getElementById('e14p-puesto');
+  sp.innerHTML = '<option value="">— Todos —</option>'; sp.disabled = !cz;
+  if (!cz) return;
+  const r = await fetchJSON(`/api/divipol/puestos?coddepto=${cd}&codmipio=${cm}&codzona=${cz}`);
+  (r.data.data || []).forEach(p => {
+    const o = document.createElement('option');
+    o.value = p.codpuesto; o.textContent = `${p.codpuesto} - ${p.nompuesto || ''}`;
+    sp.appendChild(o);
+  });
+}
+
+function e14presResetFiltros() {
+  ['e14p-depto','e14p-mipio','e14p-zona','e14p-puesto'].forEach(id => {
+    document.getElementById(id).value = '';
+  });
+  document.getElementById('e14p-mesa').value = '';
+  document.getElementById('e14p-resultados').innerHTML = '<p style="color:#666;font-style:italic">Seleccione filtros y presione "Buscar E14".</p>';
+}
+
+async function e14presBuscar() {
+  const cd = document.getElementById('e14p-depto').value;
+  const cm = document.getElementById('e14p-mipio').value;
+  const cz = document.getElementById('e14p-zona').value;
+  const cp = document.getElementById('e14p-puesto').value;
+  const mesa = document.getElementById('e14p-mesa').value.trim();
+  if (!cd || !cm || cz === '' || !cp) {
+    document.getElementById('e14p-msg').innerHTML = '<div style="color:#dc2626">Debe seleccionar depto, municipio, zona y puesto.</div>';
+    return;
+  }
+  document.getElementById('e14p-msg').innerHTML = '';
+  document.getElementById('e14p-resultados').innerHTML = '<div class="loading">Buscando...</div>';
+  let url = `/api/e14-pres/buscar?coddepto=${cd}&codmipio=${cm}&codzona=${cz}&codpuesto=${cp}`;
+  if (mesa) url += '&mesa=' + encodeURIComponent(mesa);
+  const r = await fetchJSON(url);
+  if (!r.data.success) {
+    document.getElementById('e14p-resultados').innerHTML = `<div style="color:#dc2626">${r.data.error}</div>`;
+    return;
+  }
+  const data = r.data.data;
+  const total = r.data.total || 0;
+  if (total === 0) {
+    document.getElementById('e14p-resultados').innerHTML = '<p style="color:#9a3412">⚠️ No se encontraron E14 indexados para esta divipol.</p>';
+    return;
+  }
+  const fmt = (titulo, lista, color) => {
+    if (!lista || !lista.length) return '';
+    const rows = lista.map(e => `
+      <tr>
+        <td>${e.nombre_archivo}</td>
+        <td><span class="badge" style="background:${color};color:#fff">${e.fuente}</span></td>
+        <td>
+          <button class="btn" onclick="e14presAbrirVisor('${e.path_token}','${e.nombre_archivo.replace(/'/g,'')}')">👁️ Ver</button>
+          <a class="btn" style="background:#10b981;text-decoration:none" href="/api/e14-pres/ver/${e.path_token}" target="_blank">⬇️ PDF</a>
+        </td>
+      </tr>`).join('');
+    return `<h4 style="margin-top:14px;color:${color}">${titulo} (${lista.length})</h4>
+            <table><thead><tr><th>Archivo</th><th>Fuente</th><th>Acción</th></tr></thead><tbody>${rows}</tbody></table>`;
+  };
+  document.getElementById('e14p-resultados').innerHTML =
+    fmt('🔑 Claveros', data.claveros, '#16a34a') +
+    fmt('🧑‍⚖️ Delegados', data.delegados, '#0891b2') +
+    fmt('📡 Transmisión', data.transmision, '#7c3aed');
+}
+
+async function e14presAbrirVisor(token, nombre) {
+  e14pCurrent = { token, pagina: 1, total: null, nombre };
+  document.getElementById('e14p-viewer-card').style.display = '';
+  document.getElementById('e14p-viewer-title').textContent = '📄 ' + nombre;
+  document.getElementById('e14p-pag-num').value = 1;
+  document.getElementById('e14p-pag-total').textContent = '?';
+  await e14presCargarImagen();
+  document.getElementById('e14p-viewer-card').scrollIntoView({behavior:'smooth'});
+}
+
+async function e14presCargarImagen() {
+  const img = document.getElementById('e14p-img');
+  const ld  = document.getElementById('e14p-img-loading');
+  img.style.display = 'none'; ld.style.display = ''; ld.textContent = 'Cargando página ' + e14pCurrent.pagina + '...';
+  const r = await fetchJSON(`/api/e14-pres/pagina-imagen?path_token=${encodeURIComponent(e14pCurrent.token)}&page=${e14pCurrent.pagina}`);
+  if (!r.data.success) {
+    ld.textContent = '❌ ' + r.data.error;
+    if (e14pCurrent.pagina > 1) e14pCurrent.pagina--;
+    return;
+  }
+  img.src = r.data.imagen_base64;
+  img.style.display = ''; ld.style.display = 'none';
+}
+
+function e14presPagAnt() {
+  if (e14pCurrent.pagina > 1) {
+    e14pCurrent.pagina--;
+    document.getElementById('e14p-pag-num').value = e14pCurrent.pagina;
+    e14presCargarImagen();
+  }
+}
+function e14presPagSig() {
+  e14pCurrent.pagina++;
+  document.getElementById('e14p-pag-num').value = e14pCurrent.pagina;
+  e14presCargarImagen();
+}
+function e14presIrPagina() {
+  const v = parseInt(document.getElementById('e14p-pag-num').value || '1');
+  e14pCurrent.pagina = Math.max(1, v);
+  e14presCargarImagen();
+}
+function e14presDescargar() {
+  if (e14pCurrent.token) window.open(`/api/e14-pres/ver/${e14pCurrent.token}`, '_blank');
+}
+function e14presCerrarVisor() {
+  document.getElementById('e14p-viewer-card').style.display = 'none';
+  e14pCurrent = { token: null, pagina: 1, total: null, nombre: '' };
+}
+
+async function e14presCargarMonitor() {
+  const r = await fetchJSON('/api/e14-pres/monitor/resumen');
+  const banner = document.getElementById('e14p-banner');
+  if (!r.data.success) {
+    document.getElementById('e14p-resumen').innerHTML = `<div style="color:#dc2626">${r.data.error}</div>`;
+    return;
+  }
+  const d = r.data.data;
+  if (!d.existe_ruta) {
+    banner.style.background = '#fef3c7'; banner.style.color = '#92400e';
+    banner.innerHTML = `⚠️ La ruta del repositorio E14 PRES <b>aún no existe</b> en el servidor (<code>${d.ruta}</code>). Pendiente de configurar.`;
+  } else {
+    banner.style.background = '#dcfce7'; banner.style.color = '#166534';
+    banner.innerHTML = `✅ Repositorio E14 PRES activo en <code>${d.ruta}</code>`;
+  }
+  document.getElementById('e14p-resumen').innerHTML = `
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px">
+      <div style="background:#f1f5f9;padding:10px;border-radius:6px"><b>Mesas totales</b><br><span style="font-size:1.4em">${(d.total_mesas||0).toLocaleString()}</span></div>
+      <div style="background:#dcfce7;padding:10px;border-radius:6px"><b>Mesas cubiertas</b><br><span style="font-size:1.4em">${(d.mesas_cubiertas||0).toLocaleString()}</span></div>
+      <div style="background:#dbeafe;padding:10px;border-radius:6px"><b>Cobertura</b><br><span style="font-size:1.4em">${d.cobertura}%</span></div>
+      <div style="background:#fef3c7;padding:10px;border-radius:6px"><b>Total E14</b><br><span style="font-size:1.4em">${(d.total_e14||0).toLocaleString()}</span></div>
+      <div style="background:#f3e8ff;padding:8px;border-radius:6px"><b>🔑 Claveros</b>: ${(d.claveros||0).toLocaleString()}</div>
+      <div style="background:#f3e8ff;padding:8px;border-radius:6px"><b>🧑‍⚖️ Delegados</b>: ${(d.delegados||0).toLocaleString()}</div>
+      <div style="background:#f3e8ff;padding:8px;border-radius:6px"><b>📡 Transmisión</b>: ${(d.transmision||0).toLocaleString()}</div>
+    </div>`;
+  const rt = await fetchJSON('/api/e14-pres/monitor/por-depto');
+  if (rt.data.success) {
+    const rows = (rt.data.data || []).map(x => `
+      <tr><td>${x.coddepto}</td><td>${x.nomdepto || ''}</td>
+        <td style="text-align:right">${(x.mesas_esperadas||0).toLocaleString()}</td>
+        <td style="text-align:right">${(x.mesas_cubiertas||0).toLocaleString()}</td>
+        <td style="text-align:right">${x.mesas_esperadas ? Math.round((x.mesas_cubiertas||0)/x.mesas_esperadas*100) : 0}%</td>
+        <td style="text-align:right">${(x.claveros||0).toLocaleString()}</td>
+        <td style="text-align:right">${(x.delegados||0).toLocaleString()}</td>
+        <td style="text-align:right">${(x.transmision||0).toLocaleString()}</td>
+      </tr>`).join('');
+    document.getElementById('e14p-monitor-tabla').innerHTML = `
+      <table><thead><tr><th>Cód</th><th>Departamento</th><th>Esperadas</th><th>Cubiertas</th><th>%</th><th>Claveros</th><th>Delegados</th><th>Transm.</th></tr></thead>
+      <tbody>${rows}</tbody></table>`;
+  }
 }
 
 // ===================== MÓDULO COMISIONES ESCRUTINIO =====================
