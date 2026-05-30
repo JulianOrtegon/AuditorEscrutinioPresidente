@@ -1764,6 +1764,760 @@ def inv_pres_eliminar_grupo():
         logger.exception('[inv-pres/eliminar]')
         return jsonify({'success': False, 'error': str(e)}), 500
 
+# ==================== COMISIONES ESCRUTINIO ====================
+
+@app.route('/api/comisiones-pres/cargar-excel', methods=['POST'])
+def com_pres_cargar_excel():
+    err = _require_session()
+    if err: return err
+    if not _is_admin():
+        return jsonify({'success': False, 'error': 'Solo admin'}), 403
+    if 'archivo' not in request.files:
+        return jsonify({'success': False, 'error': 'No se envió archivo'}), 400
+    try:
+        import openpyxl, io as _io2
+        wb = openpyxl.load_workbook(_io2.BytesIO(request.files['archivo'].read()), read_only=True)
+        ws = wb[wb.sheetnames[0]]
+        rows = list(ws.iter_rows(values_only=True))
+        wb.close()
+        if len(rows) < 2:
+            return jsonify({'success': False, 'error': 'Archivo vacío'}), 400
+        data_rows = rows[1:]
+
+        def _si(v):
+            if v is None: return None
+            try: return int(v)
+            except (ValueError, TypeError): return None
+        def _ss(v):
+            if v is None: return None
+            s = str(v).strip()
+            return s if s else None
+
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute('TRUNCATE TABLE distribucion_comisiones_presidencial_2026 RESTART IDENTITY')
+                sql = '''INSERT INTO distribucion_comisiones_presidencial_2026
+                         (coddepto, nomdepto, codmpio, nommpio, zona, codpuesto, nompuesto,
+                          codcomuna, nomcomuna, comision_nacional, comision_dptal, comision_municipal,
+                          comision_zonal, comision_auxiliar, nombre_comision, mesa_inicial, mesa_final,
+                          total_mesas, tipo_comision, lugar_escrutinios, direccion_escrutinios)
+                         VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)'''
+                batch = []
+                for r in data_rows:
+                    # 21 columnas según el formato
+                    if len(r) < 21:
+                        r = list(r) + [None] * (21 - len(r))
+                    batch.append((
+                        _ss(r[0]), _ss(r[1]), _ss(r[2]), _ss(r[3]),
+                        _ss(r[4]), _ss(r[5]), _ss(r[6]),
+                        _ss(r[7]), _ss(r[8]),
+                        _si(r[9]), _si(r[10]), _si(r[11]),
+                        _si(r[12]), _si(r[13]), _ss(r[14]),
+                        _si(r[15]), _si(r[16]), _si(r[17]),
+                        _ss(r[18]), _ss(r[19]), _ss(r[20])
+                    ))
+                cur.executemany(sql, batch)
+                conn.commit()
+        return jsonify({'success': True, 'message': f'{len(data_rows):,} registros cargados.'})
+    except Exception as e:
+        logger.exception('[comisiones-pres/cargar]')
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/comisiones-pres/resumen', methods=['GET'])
+def com_pres_resumen():
+    err = _require_session()
+    if err: return err
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute('SELECT COUNT(*) AS total FROM distribucion_comisiones_presidencial_2026')
+                total = cur.fetchone()['total']
+                cur.execute("""SELECT COUNT(DISTINCT nombre_comision) AS comisiones
+                               FROM distribucion_comisiones_presidencial_2026""")
+                comisiones = cur.fetchone()['comisiones']
+                cur.execute("""SELECT tipo_comision, COUNT(*) AS n, SUM(total_mesas) AS mesas
+                               FROM distribucion_comisiones_presidencial_2026
+                               WHERE tipo_comision IS NOT NULL
+                               GROUP BY tipo_comision ORDER BY n DESC""")
+                por_tipo = cur.fetchall()
+                cur.execute("""SELECT coddepto, MIN(nomdepto) AS nomdepto,
+                                      COUNT(DISTINCT nombre_comision) AS comisiones,
+                                      COUNT(*) AS asignaciones,
+                                      SUM(total_mesas) AS total_mesas
+                               FROM distribucion_comisiones_presidencial_2026
+                               WHERE coddepto IS NOT NULL
+                               GROUP BY coddepto ORDER BY coddepto""")
+                por_depto = cur.fetchall()
+        return jsonify({'success': True, 'total': total, 'comisiones': comisiones,
+                        'por_tipo': por_tipo, 'por_depto': por_depto})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/comisiones-pres/departamentos', methods=['GET'])
+def com_pres_deptos():
+    err = _require_session()
+    if err: return err
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""SELECT DISTINCT coddepto, UPPER(nomdepto) AS nomdepto
+                           FROM distribucion_comisiones_presidencial_2026
+                           WHERE coddepto IS NOT NULL ORDER BY coddepto""")
+            return jsonify({'success': True, 'data': cur.fetchall()})
+
+@app.route('/api/comisiones-pres/municipios', methods=['GET'])
+def com_pres_mpios():
+    err = _require_session()
+    if err: return err
+    cd = request.args.get('coddepto')
+    if not cd: return jsonify({'success': True, 'data': []})
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""SELECT DISTINCT codmpio, UPPER(nommpio) AS nommpio
+                           FROM distribucion_comisiones_presidencial_2026
+                           WHERE coddepto=%s AND codmpio IS NOT NULL ORDER BY nommpio""", (cd,))
+            return jsonify({'success': True, 'data': cur.fetchall()})
+
+@app.route('/api/comisiones-pres/zonas', methods=['GET'])
+def com_pres_zonas():
+    err = _require_session()
+    if err: return err
+    cd = request.args.get('coddepto'); cm = request.args.get('codmpio')
+    where = ['zona IS NOT NULL']; params = []
+    if cd: where.append('coddepto=%s'); params.append(cd)
+    if cm: where.append('codmpio=%s'); params.append(cm)
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(f"""SELECT DISTINCT zona FROM distribucion_comisiones_presidencial_2026
+                            WHERE {' AND '.join(where)} ORDER BY zona""", params)
+            return jsonify({'success': True, 'data': cur.fetchall()})
+
+@app.route('/api/comisiones-pres/consultar', methods=['GET'])
+def com_pres_consultar():
+    err = _require_session()
+    if err: return err
+    try:
+        cd = request.args.get('coddepto', '')
+        cm = request.args.get('codmpio', '')
+        cz = request.args.get('zona', '')
+        tipo = request.args.get('tipo', '')
+        nombre = request.args.get('nombre', '')
+        pagina = max(1, int(request.args.get('pagina', 1)))
+        por_pagina = min(500, max(20, int(request.args.get('por_pagina', 100))))
+
+        where, params = [], []
+        if cd:     where.append('coddepto=%s');  params.append(cd)
+        if cm:     where.append('codmpio=%s');   params.append(cm)
+        if cz:     where.append('zona=%s');      params.append(cz)
+        if tipo:   where.append('tipo_comision=%s'); params.append(tipo)
+        if nombre: where.append('nombre_comision ILIKE %s'); params.append(f'%{nombre}%')
+        where_sql = ' AND '.join(where) if where else '1=1'
+
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(f"SELECT COUNT(*) AS n FROM distribucion_comisiones_presidencial_2026 WHERE {where_sql}", params)
+                total = cur.fetchone()['n']
+                offset = (pagina - 1) * por_pagina
+                cur.execute(f"""SELECT * FROM distribucion_comisiones_presidencial_2026
+                                WHERE {where_sql}
+                                ORDER BY coddepto, codmpio, zona, codpuesto, nombre_comision
+                                LIMIT %s OFFSET %s""", params + [por_pagina, offset])
+                filas = cur.fetchall()
+        return jsonify({'success': True, 'data': filas, 'total': total,
+                        'pagina': pagina, 'por_pagina': por_pagina,
+                        'paginas': (total + por_pagina - 1) // por_pagina})
+    except Exception as e:
+        logger.exception('[comisiones-pres/consultar]')
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/comisiones-pres/vaciar', methods=['POST'])
+def com_pres_vaciar():
+    err = _require_session()
+    if err: return err
+    if not _is_admin():
+        return jsonify({'success': False, 'error': 'Solo admin'}), 403
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute('TRUNCATE TABLE distribucion_comisiones_presidencial_2026 RESTART IDENTITY')
+            conn.commit()
+    return jsonify({'success': True, 'message': 'Tabla vaciada'})
+
+# ==================== AGE — Observaciones Acta General Escrutinio ====================
+import threading as _threading
+import re as _re_age
+
+_age_pres_progreso = {'activo': False, 'total': 0, 'procesados': 0,
+                      'registros': 0, 'actual': '', 'errores': [], 'terminado': False}
+
+def _parsear_age_pres(ruta_docx):
+    """Parser de .docx AGE — extrae observaciones por mesa."""
+    from docx import Document
+    doc = Document(ruta_docx)
+    obs_list = []
+    last = {'coddepto': '', 'nomdepto': '', 'codmpio': '', 'nommpio': ''}
+    corp_map = {'01': 'SENADO', '02': 'CAMARA', '03': 'CNS', '06': 'CONSULTAS',
+                '001': 'PRESIDENTE', '1': 'SENADO', '2': 'CAMARA'}
+
+    for p in doc.paragraphs:
+        txt = p.text.strip()
+        if 'DEPARTAMENTO' not in txt:
+            continue
+        registros = _re_age.split(r'(?=DEPARTAMENTO)', txt)
+        for reg in registros:
+            reg = reg.strip()
+            if not reg or not reg.startswith('DEPARTAMENTO'):
+                continue
+            depto_m = _re_age.search(r'DEPARTAMENTO\s+(\d+)-([^,]+)', reg)
+            if not depto_m:
+                m_only = _re_age.search(r'DEPARTAMENTO\s+(\d+)\s+MUNICIPIO', reg)
+                if m_only:
+                    cd = m_only.group(1).strip()
+                    nd = last['nomdepto'] if last['coddepto'].lstrip('0') == cd.lstrip('0') else ''
+                    depto_m = type('M', (), {'group': lambda self, n, _cd=cd, _nd=nd: _cd if n==1 else _nd})()
+            mpio_m = _re_age.search(r'MUNICIPIO\s+(\d+)-([^,]+)', reg)
+            if not mpio_m:
+                m_only = _re_age.search(r'MUNICIPIO\s+(\d+)\s+(?:ANTE|ZONA)', reg)
+                if m_only:
+                    cm = m_only.group(1).strip()
+                    nm = last['nommpio'] if last['codmpio'].lstrip('0') == cm.lstrip('0') else ''
+                    mpio_m = type('M', (), {'group': lambda self, n, _cm=cm, _nm=nm: _cm if n==1 else _nm})()
+
+            zona_m   = _re_age.search(r'ZONA\s+(\d+)', reg)
+            puesto_m = _re_age.search(r'PUESTO\s+(\d+)-([^,]+?)(?=,\s*MESA)', reg)
+            mesa_m   = _re_age.search(r'MESA\s+(?:N[°º]\s*)?(\d+)', reg)
+            corp_m   = _re_age.search(r'(\d+)-(SENADO|CAMARA|CNS|CONSULTAS|PRESIDENTE)', reg, _re_age.I)
+            if corp_m:
+                corp_name = corp_m.group(2).upper()
+            else:
+                cm_code = _re_age.search(r'CORPORACION\s+(\d+)', reg)
+                corp_name = corp_map.get(cm_code.group(1), cm_code.group(1)) if cm_code else ''
+
+            if not mesa_m:
+                continue
+
+            votos_urna_m = _re_age.search(r'total de votos en la urna[^=]*=\s*(\d+)', reg, _re_age.I)
+            votos_inc_m  = _re_age.search(r'total votos incinerados\s*=\s*(\d+)', reg, _re_age.I)
+            sufrag_m     = _re_age.search(r'sufragantes E-?11[^=]*=\s*(\d+)', reg, _re_age.I)
+            jurados_m    = _re_age.search(r'firmada por\s+(\d+)\s+jurados', reg, _re_age.I)
+            fecha_m      = _re_age.search(r'En la fecha\s+([\d-]+\s+[\d:]+\s*[ap]\.\s*m\.)', reg, _re_age.I)
+
+            tiene_tach = 'si tiene tachaduras' in reg.lower() or 'sí tiene tachaduras' in reg.lower()
+            tiene_rec  = 'recuento' in reg.lower() and 'no registra' not in reg.lower()
+
+            tipo = 'rutinaria'; obs_texto = ''
+            if 'modificaci' in reg.lower():
+                tipo = 'modificacion'
+            elif tiene_tach:
+                spec = _re_age.search(r'borrones o otro,\s*(.+?)(?:,\s*el acta|$)', reg, _re_age.I)
+                if spec and len(spec.group(1).strip()) > 5:
+                    tipo = 'tachadura_con_detalle'; obs_texto = spec.group(1).strip()
+                else:
+                    tipo = 'tachadura'
+            obs_mesa = _re_age.search(r'observaci[oó]n de la mesa\s+(.+?)(?:\.\s*Esta informacion|$)', reg, _re_age.I)
+            if obs_mesa:
+                obs_texto = obs_mesa.group(1).strip()
+                if tipo == 'rutinaria':
+                    tipo = 'observacion_mesa'
+            if tipo == 'modificacion':
+                mod = _re_age.search(r'modificaci[oó]n de la mesa con la siguiente informaci[oó]n,?\s*(.+)', reg, _re_age.I)
+                if mod:
+                    obs_texto = mod.group(1).strip()
+
+            # Partido
+            nompartido = ''
+            for pat in [
+                r'(?:EN\s+EL\s+)?PARTIDO\s+(?:DE\s+LA\s+)?(CONSERVADOR\s+COLOMBIANO|LIBERAL\s+COLOMBIANO|CAMBIO\s+RADICAL|CENTRO\s+DEMOCR[AÁ]TICO|VERDE|ALIANZA\s+VERDE|POLO\s+DEMOCR[AÁ]TICO|COLOMBIA\s+HUMANA|PACTO\s+HIST[OÓ]RICO|SALVACI[OÓ]N\s+NACIONAL|MIRA|COMUNES|ASI|MAIS|U\b)',
+                r'EN\s+EL\s+PARTIDO\s+([A-ZÁÉÍÓÚÑ\s]+?)(?:\s+EL|\s+SE|\s+TOTAL|\s+CAT)',
+            ]:
+                pm = _re_age.search(pat, obs_texto or reg, _re_age.I)
+                if pm: nompartido = pm.group(1).strip().rstrip('.'); break
+
+            # Memorizar para herencia
+            if depto_m:
+                last['coddepto'] = depto_m.group(1).strip()
+                last['nomdepto'] = depto_m.group(2).strip()
+            if mpio_m:
+                last['codmpio'] = mpio_m.group(1).strip()
+                last['nommpio'] = mpio_m.group(2).strip()
+
+            if tipo == 'rutinaria':
+                continue
+
+            obs_list.append({
+                'coddepto': depto_m.group(1).strip() if depto_m else '',
+                'nomdepto': depto_m.group(2).strip() if depto_m else '',
+                'codmpio':  mpio_m.group(1).strip() if mpio_m else '',
+                'nommpio':  mpio_m.group(2).strip() if mpio_m else '',
+                'zona':      zona_m.group(1).strip() if zona_m else '',
+                'codpuesto': puesto_m.group(1).strip() if puesto_m else '',
+                'nompuesto': puesto_m.group(2).strip() if puesto_m else '',
+                'mesa':      mesa_m.group(1).strip(),
+                'corporacion': corp_name,
+                'codpartido': '', 'nompartido': nompartido,
+                'codcandidato': '', 'nomcandidato': '',
+                'tipo_observacion': tipo,
+                'observacion': obs_texto[:2000] if obs_texto else '',
+                'votos_urna':        int(votos_urna_m.group(1)) if votos_urna_m else None,
+                'votos_incinerados': int(votos_inc_m.group(1)) if votos_inc_m else None,
+                'sufragantes_e11':   int(sufrag_m.group(1))    if sufrag_m else None,
+                'jurados_firma':     int(jurados_m.group(1))   if jurados_m else None,
+                'tiene_tachaduras': tiene_tach,
+                'tiene_recuento':   tiene_rec,
+                'fecha_registro':   fecha_m.group(1) if fecha_m else '',
+            })
+    return obs_list
+
+def _is_admin():
+    return session.get('id_perfil') == 1
+
+@app.route('/api/age-pres/escanear', methods=['POST'])
+def age_pres_escanear():
+    err = _require_session()
+    if err: return err
+    if not _is_admin():
+        return jsonify({'success': False, 'error': 'Acceso denegado'}), 403
+    try:
+        d = request.get_json() or {}
+        carpeta = (d.get('carpeta') or '').strip()
+        if not carpeta or not os.path.isdir(carpeta):
+            return jsonify({'success': False, 'error': f'Carpeta no encontrada: {carpeta}'})
+        archivos = [f for f in os.listdir(carpeta) if f.lower().endswith('.docx') and not f.startswith('~$')]
+        return jsonify({'success': True, 'archivos': len(archivos), 'carpeta': carpeta})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/age-pres/cargar-carpeta', methods=['POST'])
+def age_pres_cargar_carpeta():
+    global _age_pres_progreso
+    err = _require_session()
+    if err: return err
+    if not _is_admin():
+        return jsonify({'success': False, 'error': 'Acceso denegado'}), 403
+    if _age_pres_progreso['activo']:
+        return jsonify({'success': False, 'error': 'Ya hay una carga en curso'})
+    try:
+        d = request.get_json() or {}
+        carpeta = (d.get('carpeta') or '').strip()
+        procesados_dir = (d.get('procesados') or '').strip()
+        if not carpeta or not os.path.isdir(carpeta):
+            return jsonify({'success': False, 'error': f'Carpeta no encontrada: {carpeta}'})
+        if procesados_dir:
+            os.makedirs(procesados_dir, exist_ok=True)
+        archivos = sorted([f for f in os.listdir(carpeta)
+                           if f.lower().endswith('.docx') and not f.startswith('~$')])
+        if not archivos:
+            return jsonify({'success': False, 'error': 'No hay archivos .docx en la carpeta'})
+
+        _age_pres_progreso = {'activo': True, 'total': len(archivos), 'procesados': 0,
+                              'registros': 0, 'actual': '', 'errores': [], 'terminado': False}
+
+        def procesar():
+            global _age_pres_progreso
+            import shutil as _sh
+            for nombre in archivos:
+                _age_pres_progreso['actual'] = nombre
+                ruta = os.path.join(carpeta, nombre)
+                try:
+                    obs = _parsear_age_pres(ruta)
+                    if obs:
+                        with get_db_connection() as conn:
+                            with conn.cursor() as cur:
+                                cur.execute('DELETE FROM age_presidencial_2026 WHERE archivo = %s', (nombre,))
+                                cur.executemany("""
+                                    INSERT INTO age_presidencial_2026
+                                    (coddepto, nomdepto, codmpio, nommpio, zona, codpuesto, nompuesto, mesa,
+                                     corporacion, codpartido, nompartido, codcandidato, nomcandidato,
+                                     tipo_observacion, observacion, votos_urna, votos_incinerados,
+                                     sufragantes_e11, jurados_firma, tiene_tachaduras, tiene_recuento,
+                                     fecha_registro, archivo)
+                                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                                """, [(o['coddepto'], o['nomdepto'], o['codmpio'], o['nommpio'],
+                                       o['zona'], o['codpuesto'], o['nompuesto'], o['mesa'],
+                                       o['corporacion'], o['codpartido'], o['nompartido'],
+                                       o['codcandidato'], o['nomcandidato'], o['tipo_observacion'],
+                                       o['observacion'], o['votos_urna'], o['votos_incinerados'],
+                                       o['sufragantes_e11'], o['jurados_firma'], o['tiene_tachaduras'],
+                                       o['tiene_recuento'], o['fecha_registro'], nombre) for o in obs])
+                                conn.commit()
+                        _age_pres_progreso['registros'] += len(obs)
+                    if procesados_dir:
+                        dst = os.path.join(procesados_dir, nombre)
+                        if os.path.exists(dst): os.remove(dst)
+                        _sh.move(ruta, dst)
+                except Exception as ex:
+                    _age_pres_progreso['errores'].append(f'{nombre}: {ex}')
+                _age_pres_progreso['procesados'] += 1
+            _age_pres_progreso['activo'] = False
+            _age_pres_progreso['terminado'] = True
+            _age_pres_progreso['actual'] = ''
+
+        _threading.Thread(target=procesar, daemon=True).start()
+        return jsonify({'success': True, 'total': len(archivos), 'msg': 'Carga iniciada'})
+    except Exception as e:
+        _age_pres_progreso['activo'] = False
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/age-pres/progreso', methods=['GET'])
+def age_pres_progreso_g():
+    err = _require_session()
+    if err: return err
+    return jsonify({'success': True, **_age_pres_progreso})
+
+@app.route('/api/age-pres/resumen', methods=['GET'])
+def age_pres_resumen():
+    err = _require_session()
+    if err: return err
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute('SELECT COUNT(*) AS total FROM age_presidencial_2026')
+                total = cur.fetchone()['total']
+                cur.execute('SELECT COUNT(DISTINCT archivo) AS archivos FROM age_presidencial_2026')
+                archivos = cur.fetchone()['archivos']
+                cur.execute("""SELECT tipo_observacion, COUNT(*) AS cantidad
+                               FROM age_presidencial_2026
+                               GROUP BY tipo_observacion ORDER BY cantidad DESC""")
+                por_tipo = cur.fetchall()
+                cur.execute("""SELECT archivo, COUNT(*) AS observaciones,
+                                      COUNT(DISTINCT coddepto || codmpio) AS municipios,
+                                      MIN(fecha_carga) AS fecha
+                               FROM age_presidencial_2026
+                               GROUP BY archivo ORDER BY fecha DESC""")
+                por_arch = cur.fetchall()
+        return jsonify({'success': True, 'total': total, 'archivos': archivos,
+                        'por_tipo': por_tipo, 'por_archivo': por_arch})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/age-pres/filtros', methods=['GET'])
+def age_pres_filtros():
+    err = _require_session()
+    if err: return err
+    try:
+        depto = request.args.get('depto', '')
+        mpio  = request.args.get('mpio', '')
+        zona  = request.args.get('zona', '')
+        depto_i = int(depto) if depto else None
+        mpio_i  = int(mpio)  if mpio  else None
+        zona_i  = int(zona)  if zona  else None
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""SELECT LPAD(coddepto::text,2,'0') AS coddepto, nomdepto
+                               FROM divipol_presidencial_2026
+                               WHERE clase='D' AND coddepto > 0 ORDER BY coddepto""")
+                deptos = cur.fetchall()
+                mpios = []
+                if depto_i is not None:
+                    cur.execute("""SELECT LPAD(codmipio::text,3,'0') AS codmpio, nommipio AS nommpio
+                                   FROM divipol_presidencial_2026
+                                   WHERE clase='M' AND coddepto=%s ORDER BY codmipio""", (depto_i,))
+                    mpios = cur.fetchall()
+                zonas = []
+                if depto_i is not None and mpio_i is not None:
+                    cur.execute("""SELECT DISTINCT LPAD(codzona::text,2,'0') AS zona
+                                   FROM divipol_presidencial_2026
+                                   WHERE clase='Z' AND coddepto=%s AND codmipio=%s ORDER BY zona""",
+                                (depto_i, mpio_i))
+                    zonas = [r['zona'] for r in cur.fetchall()]
+                puestos = []
+                if depto_i is not None and mpio_i is not None and zona_i is not None:
+                    cur.execute("""SELECT codpuesto, nompuesto
+                                   FROM divipol_presidencial_2026
+                                   WHERE clase='P' AND coddepto=%s AND codmipio=%s AND codzona=%s
+                                   ORDER BY codpuesto""", (depto_i, mpio_i, zona_i))
+                    puestos = cur.fetchall()
+                cur.execute("SELECT codpartido, nompartido FROM partidos_presidencial_2026 ORDER BY nompartido")
+                partidos = cur.fetchall()
+                cur.execute("""SELECT DISTINCT tipo_observacion AS tipo FROM age_presidencial_2026
+                               WHERE tipo_observacion IS NOT NULL ORDER BY tipo""")
+                tipos = [r['tipo'] for r in cur.fetchall()]
+        return jsonify({'success': True, 'deptos': deptos, 'mpios': mpios,
+                        'zonas': zonas, 'puestos': puestos, 'partidos': partidos,
+                        'tipos': tipos})
+    except Exception as e:
+        logger.exception('[age-pres/filtros]')
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/age-pres/consultar', methods=['GET'])
+def age_pres_consultar():
+    err = _require_session()
+    if err: return err
+    try:
+        depto = request.args.get('depto', '')
+        mpio  = request.args.get('mpio', '')
+        zona  = request.args.get('zona', '')
+        puesto= request.args.get('puesto', '')
+        mesa  = request.args.get('mesa', '')
+        corp  = request.args.get('corporacion', '')
+        tipo  = request.args.get('tipo', '')
+        partido = request.args.get('partido', '')
+        pagina = max(1, int(request.args.get('pagina', 1)))
+        por_pagina = min(500, max(20, int(request.args.get('por_pagina', 100))))
+
+        where, params = [], []
+        if depto:   where.append("LPAD(coddepto,2,'0')=%s"); params.append(depto.zfill(2))
+        if mpio:    where.append("LPAD(codmpio,3,'0')=%s"); params.append(mpio.zfill(3))
+        if zona:    where.append("LPAD(zona,2,'0')=%s");    params.append(zona.zfill(2))
+        if puesto:  where.append("codpuesto=%s");           params.append(puesto)
+        if mesa:    where.append("mesa=%s");                params.append(mesa)
+        if corp:    where.append("corporacion=%s");         params.append(corp)
+        if tipo:    where.append("tipo_observacion=%s");    params.append(tipo)
+        if partido: where.append("nompartido ILIKE %s");    params.append(f'%{partido}%')
+        where_sql = ' AND '.join(where) if where else '1=1'
+
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(f"SELECT COUNT(*) AS n FROM age_presidencial_2026 WHERE {where_sql}", params)
+                total = cur.fetchone()['n']
+                offset = (pagina - 1) * por_pagina
+                cur.execute(f"""SELECT id, coddepto, nomdepto, codmpio, nommpio, zona,
+                                       codpuesto, nompuesto, mesa, corporacion, nompartido,
+                                       tipo_observacion, observacion, votos_urna, votos_incinerados,
+                                       sufragantes_e11, jurados_firma, tiene_tachaduras, tiene_recuento,
+                                       fecha_registro, archivo, fecha_carga
+                                FROM age_presidencial_2026
+                                WHERE {where_sql}
+                                ORDER BY coddepto, codmpio, zona, codpuesto, mesa, id
+                                LIMIT %s OFFSET %s""", params + [por_pagina, offset])
+                filas = cur.fetchall()
+        return jsonify({'success': True, 'data': filas, 'total': total,
+                        'pagina': pagina, 'por_pagina': por_pagina,
+                        'paginas': (total + por_pagina - 1) // por_pagina})
+    except Exception as e:
+        logger.exception('[age-pres/consultar]')
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/age-pres/vaciar', methods=['POST'])
+def age_pres_vaciar():
+    err = _require_session()
+    if err: return err
+    if not _is_admin():
+        return jsonify({'success': False, 'error': 'Acceso denegado'}), 403
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute('TRUNCATE TABLE age_presidencial_2026 RESTART IDENTITY')
+                conn.commit()
+        return jsonify({'success': True, 'message': 'Tabla AGE vaciada'})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+# ==================== EVIDENCIAS (vista de abogados — read-only) ====================
+import zipfile, io as _io
+
+@app.route('/api/evidencias-pres/exportar-excel-listado', methods=['GET'])
+def evpres_excel_listado():
+    """Excel del listado de investigaciones agrupadas."""
+    err = _require_session()
+    if err: return err
+    try:
+        from openpyxl import Workbook
+        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+        from openpyxl.utils import get_column_letter
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT i.coddepto, MIN(i.nomdepto) AS nomdepto,
+                           i.codcandidato1, MIN(i.nom_candidato1) AS nom_candidato1, MIN(i.nom_partido1) AS nom_partido1,
+                           i.codcandidato2, MIN(i.nom_candidato2) AS nom_candidato2, MIN(i.nom_partido2) AS nom_partido2,
+                           COUNT(*) AS num_mesas,
+                           COUNT(DISTINCT i.codmipio) AS num_mpios,
+                           SUM(CASE WHEN EXISTS (
+                               SELECT 1 FROM evidencias_presidencial_2026 e
+                               WHERE e.idmesa=i.idmesa
+                                 AND e.codcandidato IN (i.codcandidato1, i.codcandidato2)
+                                 AND COALESCE(e.tipo_formulario,'') NOT IN ('NO_E14','SIN_EVIDENCIA')
+                           ) THEN 1 ELSE 0 END) AS mesas_con_evidencia
+                    FROM investigaciones_presidencial_2026 i
+                    GROUP BY i.coddepto, i.codcandidato1, i.codcandidato2
+                    ORDER BY i.coddepto, num_mesas DESC
+                """)
+                rows = cur.fetchall()
+
+        wb = Workbook(); ws = wb.active; ws.title = 'Investigaciones'
+        hf = Font(name='Arial', bold=True, size=10, color='FFFFFF')
+        hfill = PatternFill('solid', fgColor='1E3A8A')
+        bdr = Border(left=Side('thin'), right=Side('thin'), top=Side('thin'), bottom=Side('thin'))
+        ws.merge_cells('A1:J1')
+        ws['A1'] = 'Investigaciones Presidencial 2026 — Listado'
+        ws['A1'].font = Font(name='Arial', bold=True, size=13, color='1E3A8A')
+        ws['A1'].alignment = Alignment(horizontal='center')
+
+        headers = ['#', 'Cód Depto', 'Departamento',
+                   'Cand A', 'Candidato A', 'Partido A',
+                   'Cand B', 'Candidato B', 'Mesas', 'Con Evidencia']
+        for i, h in enumerate(headers, 1):
+            c = ws.cell(row=3, column=i, value=h)
+            c.font = hf; c.fill = hfill; c.alignment = Alignment(horizontal='center'); c.border = bdr
+        for idx, r in enumerate(rows, 4):
+            vals = [idx-3, r['coddepto'], r['nomdepto'] or '',
+                    r['codcandidato1'], r['nom_candidato1'] or '', r['nom_partido1'] or '',
+                    r['codcandidato2'], r['nom_candidato2'] or '',
+                    r['num_mesas'] or 0, r['mesas_con_evidencia'] or 0]
+            for ci, v in enumerate(vals, 1):
+                cell = ws.cell(row=idx, column=ci, value=v); cell.border = bdr
+                if ci in (9, 10): cell.number_format = '#,##0'
+        widths = [5, 9, 22, 7, 28, 28, 7, 28, 10, 12]
+        for i, w in enumerate(widths, 1):
+            ws.column_dimensions[get_column_letter(i)].width = w
+        ws.freeze_panes = 'A4'
+
+        out = _io.BytesIO(); wb.save(out); out.seek(0)
+        from flask import send_file
+        return send_file(out, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                         as_attachment=True,
+                         download_name=f'Investigaciones_Presidencial_2026_{date.today().isoformat()}.xlsx')
+    except Exception as e:
+        logger.exception('[evpres/excel-listado]')
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/evidencias-pres/exportar-excel-grupo', methods=['GET'])
+def evpres_excel_grupo():
+    """Excel detallado de un grupo (par candidatos × depto) con todas sus mesas + evidencias."""
+    err = _require_session()
+    if err: return err
+    try:
+        from openpyxl import Workbook
+        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+        from openpyxl.utils import get_column_letter
+        coddepto = request.args.get('coddepto', type=int)
+        ccd1 = request.args.get('codcandidato1', type=int)
+        ccd2 = request.args.get('codcandidato2', type=int)
+        if not ccd1 or not ccd2:
+            return jsonify({'success': False, 'error': 'codcandidato1 y codcandidato2 requeridos'}), 400
+
+        where = ['i.codcandidato1=%s', 'i.codcandidato2=%s']
+        params = [ccd1, ccd2]
+        if coddepto is not None:
+            where.append('i.coddepto=%s'); params.append(coddepto)
+
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(f"""
+                    SELECT i.idmesa, i.coddepto, i.nomdepto, i.codmipio, i.nommipio,
+                           i.codzona, i.codpuesto, i.nompuesto, i.mesa,
+                           i.nom_candidato1, i.preconteo1, i.dia_valor1, i.diferencia1,
+                           i.nom_candidato2, i.preconteo2, i.dia_valor2, i.diferencia2,
+                           i.estado_reclamacion, i.usuario_asignado,
+                           (SELECT COUNT(*) FROM evidencias_presidencial_2026 e
+                             WHERE e.idmesa=i.idmesa
+                               AND e.codcandidato IN (i.codcandidato1, i.codcandidato2)
+                               AND COALESCE(e.tipo_formulario,'') NOT IN ('NO_E14','SIN_EVIDENCIA')) AS num_evidencias
+                    FROM investigaciones_presidencial_2026 i
+                    WHERE {' AND '.join(where)}
+                    ORDER BY i.nommipio, i.codzona, i.codpuesto, i.mesa
+                """, params)
+                rows = cur.fetchall()
+
+        wb = Workbook(); ws = wb.active; ws.title = 'Detalle'
+        hf = Font(name='Arial', bold=True, size=10, color='FFFFFF')
+        hfill = PatternFill('solid', fgColor='1E3A8A')
+        bdr = Border(left=Side('thin'), right=Side('thin'), top=Side('thin'), bottom=Side('thin'))
+        ws.merge_cells('A1:O1')
+        nom1 = rows[0]['nom_candidato1'] if rows else f'Cand {ccd1}'
+        nom2 = rows[0]['nom_candidato2'] if rows else f'Cand {ccd2}'
+        ws['A1'] = f'Investigación Presidencial — {nom1} vs {nom2}'
+        ws['A1'].font = Font(name='Arial', bold=True, size=12, color='1E3A8A')
+        ws['A1'].alignment = Alignment(horizontal='center')
+
+        headers = ['#','Depto','Municipio','Zona','Puesto','Mesa',
+                   'Prec A','Esc A','Dif A','Prec B','Esc B','Dif B',
+                   'Estado','Asignado','Evidencias']
+        for i, h in enumerate(headers, 1):
+            c = ws.cell(row=3, column=i, value=h)
+            c.font = hf; c.fill = hfill; c.alignment = Alignment(horizontal='center'); c.border = bdr
+        for idx, r in enumerate(rows, 4):
+            puesto = f"{r['codpuesto'] or ''} - {r['nompuesto'] or ''}"
+            vals = [idx-3, r['nomdepto'] or '', r['nommipio'] or '', r['codzona'], puesto, r['mesa'],
+                    r['preconteo1'] or 0, r['dia_valor1'] or 0, r['diferencia1'] or 0,
+                    r['preconteo2'] or 0, r['dia_valor2'] or 0, r['diferencia2'] or 0,
+                    r['estado_reclamacion'] or '', r['usuario_asignado'] or '',
+                    r['num_evidencias'] or 0]
+            for ci, v in enumerate(vals, 1):
+                cell = ws.cell(row=idx, column=ci, value=v); cell.border = bdr
+                if ci in (7,8,9,10,11,12,15): cell.number_format = '#,##0'
+        widths = [5,16,18,6,30,7,8,8,8,8,8,8,12,14,11]
+        for i, w in enumerate(widths, 1):
+            ws.column_dimensions[get_column_letter(i)].width = w
+        ws.freeze_panes = 'A4'
+
+        out = _io.BytesIO(); wb.save(out); out.seek(0)
+        from flask import send_file
+        nombre = f"Detalle_{nom1[:20]}_vs_{nom2[:20]}.xlsx".replace(' ', '_').replace('/', '-')
+        return send_file(out, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                         as_attachment=True, download_name=nombre)
+    except Exception as e:
+        logger.exception('[evpres/excel-grupo]')
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/evidencias-pres/exportar-zip-grupo', methods=['GET'])
+def evpres_zip_grupo():
+    """ZIP con todas las evidencias físicas (archivos) de un grupo."""
+    err = _require_session()
+    if err: return err
+    try:
+        coddepto = request.args.get('coddepto', type=int)
+        ccd1 = request.args.get('codcandidato1', type=int)
+        ccd2 = request.args.get('codcandidato2', type=int)
+        if not ccd1 or not ccd2:
+            return jsonify({'success': False, 'error': 'codcandidato1 y codcandidato2 requeridos'}), 400
+
+        where = ['i.codcandidato1=%s', 'i.codcandidato2=%s']
+        params = [ccd1, ccd2]
+        if coddepto is not None:
+            where.append('i.coddepto=%s'); params.append(coddepto)
+
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(f"""
+                    SELECT i.idmesa, i.nomdepto, i.nommipio, i.mesa,
+                           e.id AS evid_id, e.nombre_archivo, e.ruta_archivo, e.tipo_formulario,
+                           e.observacion, e.codcandidato, e.usuario, e.fecha
+                    FROM investigaciones_presidencial_2026 i
+                    JOIN evidencias_presidencial_2026 e
+                      ON e.idmesa = i.idmesa
+                     AND e.codcandidato IN (i.codcandidato1, i.codcandidato2)
+                     AND COALESCE(e.tipo_formulario,'') NOT IN ('NO_E14','SIN_EVIDENCIA')
+                    WHERE {' AND '.join(where)}
+                    ORDER BY i.nomdepto, i.nommipio, i.mesa, e.id
+                """, params)
+                evs = cur.fetchall()
+
+        if not evs:
+            return jsonify({'success': False, 'error': 'No hay evidencias físicas en este grupo'}), 404
+
+        buf = _io.BytesIO()
+        archivos_included = 0
+        with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as zf:
+            # Index Excel mínimo
+            idx_lines = ['Mesa\tCandidato\tTipo\tArchivo\tUsuario\tFecha\tObservacion']
+            for e in evs:
+                depto = (e['nomdepto'] or 'SIN_DEPTO').replace('/', '-').strip()
+                mpio = (e['nommipio'] or 'SIN_MPIO').replace('/', '-').strip()
+                mesa = str(e['mesa'] or e['idmesa']).zfill(4)
+                tipo = e['tipo_formulario'] or 'OTRO'
+                nom_arch = e['nombre_archivo'] or f'evidencia_{e["evid_id"]}'
+                zip_path = f"{depto}/{mpio}/Mesa_{mesa}/{tipo}_{nom_arch}"
+                if e['ruta_archivo'] and os.path.exists(e['ruta_archivo']):
+                    zf.write(e['ruta_archivo'], zip_path)
+                    archivos_included += 1
+                idx_lines.append(
+                    f"{mesa}\t{e['codcandidato']}\t{tipo}\t{nom_arch}\t"
+                    f"{e['usuario'] or ''}\t{e['fecha'] or ''}\t{(e['observacion'] or '').replace(chr(9),' ')[:200]}"
+                )
+            zf.writestr('_indice.tsv', '\n'.join(idx_lines))
+
+        if archivos_included == 0:
+            return jsonify({'success': False,
+                            'error': 'Ningún archivo físico disponible en el servidor (solo metadatos)'}), 404
+
+        buf.seek(0)
+        from flask import send_file
+        return send_file(buf, mimetype='application/zip', as_attachment=True,
+                         download_name=f'evidencias_pres_{ccd1}_vs_{ccd2}.zip')
+    except Exception as e:
+        logger.exception('[evpres/zip-grupo]')
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 # ==================== CONSULTA VOTACIÓN ESCRUTINIO ====================
 
 @app.route('/api/escrutinio/dias-procesados', methods=['GET'])

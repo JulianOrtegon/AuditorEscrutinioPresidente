@@ -110,7 +110,9 @@
 
       <div class="group-title">Análisis</div>
       <a href="#" onclick="cambiarModulo('mod-investigaciones', this); invInit(); return false;">🔍 Investigaciones <span class="badge" style="background:#dcfce7;color:#166534">listo</span></a>
-      <a href="#" onclick="cambiarModulo('mod-evidencias', this); return false;">📎 Evidencias <span class="badge">por hacer</span></a>
+      <a href="#" onclick="cambiarModulo('mod-evidencias', this); evCargar(); return false;">📎 Evidencias <span class="badge" style="background:#dcfce7;color:#166534">listo</span></a>
+      <a href="#" onclick="cambiarModulo('mod-age', this); ageInit(); return false;">📋 Observaciones AGE <span class="badge" style="background:#dcfce7;color:#166534">listo</span></a>
+      <a href="#" onclick="cambiarModulo('mod-comisiones', this); comInit(); return false;">🏛️ Comisiones Escrutinio <span class="badge" style="background:#dcfce7;color:#166534">listo</span></a>
     </nav>
 
     <main class="content">
@@ -636,7 +638,184 @@
           <div id="inv-listado-content" style="margin-top:14px"><p style="color:#aaa;font-style:italic">Sin investigaciones todavía.</p></div>
         </div>
       </div>
-      <div id="mod-evidencias" class="module"><div class="card"><h2>📎 Evidencias</h2><div class="placeholder">Por hacer.</div></div></div>
+      <div id="mod-evidencias" class="module">
+        <div class="card">
+          <h2>📎 Evidencias — Consulta de Investigaciones</h2>
+          <p style="color:#666;font-size:0.88em;margin-bottom:10px">
+            Vista de las investigaciones registradas. Permite consultar y <b>descargar reportes</b>
+            (Excel del listado, Excel detallado por grupo, ZIP con evidencias físicas).
+            No permite crear, editar ni eliminar.
+          </p>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+            <button onclick="evCargar()" style="padding:6px 16px;background:#1e3a8a;color:#fff;border:none;border-radius:5px;cursor:pointer;font-size:0.9em">🔄 Refrescar</button>
+            <button onclick="evDescargarExcelListado()" style="padding:8px 16px;background:linear-gradient(135deg,#16a34a,#22c55e);color:#fff;border:none;border-radius:5px;cursor:pointer;font-weight:600">📊 Excel del listado</button>
+            <span style="margin-left:auto;color:#666;font-size:0.85em" id="ev-total"></span>
+          </div>
+          <div id="ev-loading" class="loading" style="display:none">Cargando...</div>
+          <div id="ev-content"></div>
+        </div>
+        <!-- Detalle de un grupo -->
+        <div id="ev-detalle-card" class="card" style="display:none">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+            <h2 id="ev-detalle-titulo" style="margin:0">📋 Detalle</h2>
+            <button onclick="evCerrarDetalle()" style="padding:6px 14px;background:#94a3b8;color:#fff;border:none;border-radius:5px;cursor:pointer">✕ Cerrar</button>
+          </div>
+          <div id="ev-detalle-loading" class="loading" style="display:none;margin-top:10px">Cargando mesas...</div>
+          <div id="ev-detalle-content" style="margin-top:14px;overflow-x:auto"></div>
+        </div>
+      </div>
+
+      <!-- ===== MÓDULO COMISIONES ESCRUTINIO ===== -->
+      <div id="mod-comisiones" class="module">
+        <div class="card">
+          <h2>🏛️ Comisiones Escrutinio — Presidencial 2026</h2>
+          <p style="color:#666;font-size:0.88em;margin-bottom:12px">
+            Distribución oficial de mesas por comisión escrutadora (Nacional, Departamental, Municipal, Zonal, Auxiliar).
+            Cargue del archivo Excel <code>CONFORMACION_COMISIONES_*.xlsx</code> publicado por la Registraduría.
+          </p>
+
+          <!-- Cargue de Excel -->
+          <div style="background:#f8fafc;border:2px solid #e2e8f0;border-radius:10px;padding:14px;margin-bottom:16px">
+            <h3 style="margin:0 0 10px;font-size:1em;color:#1e3a8a">📂 Importar archivo Excel</h3>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+              <input type="file" id="com-archivo" accept=".xlsx" style="padding:7px;border:1px solid #d1d5db;border-radius:5px">
+              <button onclick="comCargar()" id="com-btn-cargar" style="padding:8px 18px;background:linear-gradient(135deg,#16a34a,#22c55e);color:#fff;border:none;border-radius:5px;cursor:pointer;font-weight:600">⬆️ Cargar</button>
+              <button onclick="comVaciar()" style="padding:8px 14px;background:#dc3545;color:#fff;border:none;border-radius:5px;cursor:pointer">🗑 Vaciar</button>
+              <span id="com-msg" style="color:#666;font-size:0.88em;margin-left:auto"></span>
+            </div>
+          </div>
+
+          <!-- Resumen -->
+          <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px">
+            <div style="flex:1;min-width:140px;background:linear-gradient(135deg,#1e3a8a,#2563eb);color:#fff;padding:14px;border-radius:8px;text-align:center">
+              <div style="font-size:0.78em;opacity:0.85">Total asignaciones</div>
+              <div id="com-tot" style="font-size:1.6em;font-weight:700">—</div>
+            </div>
+            <div style="flex:1;min-width:140px;background:linear-gradient(135deg,#0891b2,#06b6d4);color:#fff;padding:14px;border-radius:8px;text-align:center">
+              <div style="font-size:0.78em;opacity:0.85">Comisiones únicas</div>
+              <div id="com-uniq" style="font-size:1.6em;font-weight:700">—</div>
+            </div>
+            <div style="flex:1;min-width:200px;background:#f8fafc;border:1px solid #e2e8f0;padding:14px;border-radius:8px">
+              <div style="font-size:0.78em;color:#888;margin-bottom:6px">Por tipo</div>
+              <div id="com-tipos" style="font-size:0.85em"></div>
+            </div>
+          </div>
+          <div id="com-por-depto-content" style="overflow-x:auto;margin-bottom:18px"></div>
+        </div>
+
+        <!-- Consulta -->
+        <div class="card">
+          <h2>🔎 Consultar Comisiones</h2>
+          <div class="filters-grid">
+            <div class="filter-group"><label>Depto</label><select id="com-f-depto" onchange="comOnDeptoChange()"><option value="">Todos</option></select></div>
+            <div class="filter-group"><label>Municipio</label><select id="com-f-mpio" onchange="comOnMpioChange()" disabled><option value="">Todos</option></select></div>
+            <div class="filter-group"><label>Zona</label><select id="com-f-zona" disabled><option value="">Todas</option></select></div>
+            <div class="filter-group"><label>Tipo</label>
+              <select id="com-f-tipo">
+                <option value="">Todos</option><option>GENERAL</option><option>DEPARTAMENTAL</option><option>MUNICIPAL</option><option>ZONAL</option><option>AUXILIAR</option>
+              </select>
+            </div>
+            <div class="filter-group" style="min-width:200px"><label>Nombre comisión (contiene)</label><input type="text" id="com-f-nombre" placeholder="..." style="padding:7px 9px;border:1px solid #d1d5db;border-radius:5px;font-size:13.5px"></div>
+          </div>
+          <div style="margin-top:8px;display:flex;gap:8px">
+            <button onclick="comConsultar(1)" id="com-btn-buscar" style="padding:9px 22px;background:linear-gradient(135deg,#1e3a8a,#2563eb);color:#fff;border:none;border-radius:5px;cursor:pointer;font-weight:600">🔍 Buscar</button>
+            <button onclick="comLimpiar()" style="padding:8px 14px;background:#94a3b8;color:#fff;border:none;border-radius:5px;cursor:pointer">🧹 Limpiar</button>
+            <span style="margin-left:auto;color:#666;font-size:0.88em" id="com-info-total"></span>
+          </div>
+          <div id="com-loading" class="loading" style="display:none">Buscando...</div>
+          <div id="com-content" style="margin-top:12px;overflow-x:auto"></div>
+          <div id="com-pag" style="display:flex;gap:6px;align-items:center;justify-content:center;flex-wrap:wrap;margin-top:12px"></div>
+        </div>
+      </div>
+
+      <!-- ===== MÓDULO AGE — Observaciones Acta General Escrutinio ===== -->
+      <div id="mod-age" class="module">
+        <!-- Cargue desde carpeta -->
+        <div class="card">
+          <h2>📋 Observaciones AGE — Presidencial 2026</h2>
+          <p style="color:#666;font-size:0.88em;margin-bottom:12px">
+            Importe archivos AGE (.docx) generados por la Registraduría para extraer las observaciones de mesa
+            (tachaduras, recuentos, modificaciones, observaciones de jurado, etc.) y consolidarlas para cruzar
+            con investigaciones.
+          </p>
+          <div style="background:#f8fafc;border:2px solid #e2e8f0;border-radius:10px;padding:16px;margin-bottom:16px">
+            <h3 style="margin:0 0 10px;font-size:1em;color:#1e3a8a">📂 Importar desde carpeta del servidor</h3>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end">
+              <div style="flex:1;min-width:260px">
+                <label style="font-size:0.82em;color:#555;display:block;margin-bottom:4px">Carpeta AGE (.docx)</label>
+                <input type="text" id="age-carpeta" placeholder="/mnt/elecciones-ext/AGE_PRES o /opt/.../AGE"
+                       style="width:100%;padding:8px 10px;border:1px solid #d1d5db;border-radius:5px;font-size:0.9em;font-family:monospace;box-sizing:border-box">
+              </div>
+              <div style="flex:1;min-width:260px">
+                <label style="font-size:0.82em;color:#555;display:block;margin-bottom:4px">Carpeta procesados (opcional)</label>
+                <input type="text" id="age-procesados" placeholder="Si se indica, mueve los .docx procesados ahí"
+                       style="width:100%;padding:8px 10px;border:1px solid #d1d5db;border-radius:5px;font-size:0.9em;font-family:monospace;box-sizing:border-box">
+              </div>
+              <div style="display:flex;gap:6px">
+                <button onclick="ageEscanear()" style="padding:9px 16px;background:#1e3a8a;color:#fff;border:none;border-radius:5px;cursor:pointer;font-weight:600">🔍 Escanear</button>
+                <button onclick="ageIniciar()" id="age-btn-iniciar" disabled style="padding:9px 16px;background:linear-gradient(135deg,#16a34a,#22c55e);color:#fff;border:none;border-radius:5px;cursor:pointer;font-weight:700;opacity:0.5">▶ Importar</button>
+              </div>
+            </div>
+            <div id="age-escaneo-info" style="margin-top:10px;font-size:0.88em;color:#555"></div>
+          </div>
+
+          <!-- Progreso -->
+          <div id="age-progress" style="display:none;margin-bottom:16px;padding:14px;background:#eff6ff;border:1px solid #2563eb;border-radius:8px">
+            <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+              <span id="age-pg-texto" style="font-weight:600;color:#1e3a8a"></span>
+              <span id="age-pg-pct" style="font-weight:700;color:#1e3a8a"></span>
+            </div>
+            <div style="background:#dbeafe;border-radius:6px;height:18px;overflow:hidden">
+              <div id="age-pg-bar" style="width:0%;height:100%;background:linear-gradient(90deg,#1e3a8a,#2563eb);transition:width 0.3s;border-radius:6px"></div>
+            </div>
+            <div style="display:flex;gap:16px;font-size:0.85em;color:#555;margin-top:8px">
+              <span>Archivos: <strong id="age-pg-archivos">0/0</strong></span>
+              <span>Observaciones: <strong id="age-pg-registros">0</strong></span>
+              <span>Procesando: <em id="age-pg-actual">—</em></span>
+            </div>
+            <div id="age-pg-errores" style="margin-top:6px;font-size:0.8em;color:#dc3545"></div>
+          </div>
+
+          <!-- Resumen -->
+          <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px">
+            <div style="flex:1;min-width:140px;background:linear-gradient(135deg,#1e3a8a,#2563eb);color:#fff;padding:14px;border-radius:8px;text-align:center">
+              <div style="font-size:0.78em;opacity:0.85">Total observaciones</div>
+              <div id="age-tot-obs" style="font-size:1.6em;font-weight:700">—</div>
+            </div>
+            <div style="flex:1;min-width:140px;background:linear-gradient(135deg,#2563eb,#3b82f6);color:#fff;padding:14px;border-radius:8px;text-align:center">
+              <div style="font-size:0.78em;opacity:0.85">Archivos importados</div>
+              <div id="age-tot-arch" style="font-size:1.6em;font-weight:700">—</div>
+            </div>
+            <button onclick="ageVaciar()" style="padding:10px 14px;background:#dc3545;color:#fff;border:none;border-radius:8px;cursor:pointer;font-weight:600">🗑 Vaciar tabla</button>
+          </div>
+          <div id="age-por-tipo" style="margin-bottom:12px"></div>
+        </div>
+
+        <!-- Filtros + consulta -->
+        <div class="card">
+          <h2>🔎 Consultar Observaciones</h2>
+          <div class="filters-grid">
+            <div class="filter-group"><label>Depto</label><select id="age-f-depto" onchange="ageCambiarFiltro('depto')"><option value="">Todos</option></select></div>
+            <div class="filter-group"><label>Municipio</label><select id="age-f-mpio" onchange="ageCambiarFiltro('mpio')" disabled><option value="">Todos</option></select></div>
+            <div class="filter-group"><label>Zona</label><select id="age-f-zona" onchange="ageCambiarFiltro('zona')" disabled><option value="">Todas</option></select></div>
+            <div class="filter-group"><label>Puesto</label><select id="age-f-puesto" disabled><option value="">Todos</option></select></div>
+            <div class="filter-group" style="min-width:90px"><label>Mesa</label><input type="text" id="age-f-mesa" placeholder="..." style="padding:7px 9px;border:1px solid #d1d5db;border-radius:5px;font-size:13.5px;width:80px"></div>
+            <div class="filter-group"><label>Corporación</label>
+              <select id="age-f-corp"><option value="">Todas</option><option>PRESIDENTE</option><option>SENADO</option><option>CAMARA</option><option>CNS</option><option>CONSULTAS</option></select>
+            </div>
+            <div class="filter-group"><label>Tipo observación</label><select id="age-f-tipo"><option value="">Todos</option></select></div>
+            <div class="filter-group" style="min-width:200px"><label>Partido (contiene)</label><input type="text" id="age-f-partido" placeholder="..." style="padding:7px 9px;border:1px solid #d1d5db;border-radius:5px;font-size:13.5px"></div>
+          </div>
+          <div style="margin-top:8px;display:flex;gap:8px">
+            <button onclick="ageConsultar(1)" id="age-btn-consultar" style="padding:9px 20px;background:linear-gradient(135deg,#1e3a8a,#2563eb);color:#fff;border:none;border-radius:5px;cursor:pointer;font-weight:600">🔍 Consultar</button>
+            <button onclick="ageLimpiar()" style="padding:8px 14px;background:#94a3b8;color:#fff;border:none;border-radius:5px;cursor:pointer">🧹 Limpiar</button>
+            <span style="margin-left:auto;color:#666;font-size:0.85em" id="age-info-total"></span>
+          </div>
+          <div id="age-consulta-loading" class="loading" style="display:none">Buscando...</div>
+          <div id="age-consulta-content" style="margin-top:12px;overflow-x:auto"></div>
+          <div id="age-consulta-pag" style="display:flex;gap:6px;align-items:center;justify-content:center;flex-wrap:wrap;margin-top:12px"></div>
+        </div>
+      </div>
     </main>
   </div>
 </div>
@@ -1563,6 +1742,129 @@ function cprRender(resp) {
   html += '</tr></tfoot></table>';
   html += `<p style="color:#666;margin-top:8px">Total registros: ${rows.length} | Tipo: ${tipo}</p>`;
   cont.innerHTML = html;
+}
+
+// ===================== MÓDULO EVIDENCIAS (read-only) =====================
+async function evCargar() {
+  const cont = document.getElementById('ev-content');
+  document.getElementById('ev-loading').style.display = 'block';
+  cont.innerHTML = '';
+  const r = await fetchJSON('/api/investigaciones-pres/listar-agrupadas');
+  document.getElementById('ev-loading').style.display = 'none';
+  if (!r.data.success) { cont.innerHTML = `<div class="error">${r.data.error}</div>`; return; }
+  const data = r.data.data || [];
+  document.getElementById('ev-total').textContent = `Total grupos: ${data.length}`;
+  if (!data.length) { cont.innerHTML = '<p style="color:#aaa;font-style:italic">No hay investigaciones registradas.</p>'; return; }
+
+  let html = '<table><thead><tr>'
+    + '<th>#</th><th>Depto</th><th>Lado A</th><th>Lado B</th>'
+    + '<th class="number">Mpios</th><th class="number">Mesas</th>'
+    + '<th class="number">Con evidencia</th><th style="text-align:center">Acciones</th>'
+    + '</tr></thead><tbody>';
+  data.forEach((g, i) => {
+    const conEv = Number(g.mesas_con_evidencia) || 0;
+    const total = Number(g.num_mesas) || 0;
+    const pct = total > 0 ? Math.round(conEv/total*100) : 0;
+    const acciones = `
+      <button onclick="evVerDetalle(${g.coddepto},${g.codcandidato1},${g.codcandidato2})"
+        style="padding:5px 10px;background:#1e3a8a;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px;margin-right:3px" title="Ver detalle">📋</button>
+      <button onclick="evDescargarExcelGrupo(${g.coddepto},${g.codcandidato1},${g.codcandidato2})"
+        style="padding:5px 10px;background:#16a34a;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px;margin-right:3px" title="Excel detallado">📊</button>
+      <button onclick="evDescargarZipGrupo(${g.coddepto},${g.codcandidato1},${g.codcandidato2})"
+        style="padding:5px 10px;background:#8e44ad;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px" title="ZIP evidencias">📦</button>
+    `;
+    html += `<tr>
+      <td>${i+1}</td>
+      <td>${g.coddepto} - ${g.nomdepto||''}</td>
+      <td><b>${g.codcandidato1}</b> - ${g.nom_candidato1||''}<br><span style="font-size:0.78em;color:#888">${g.nom_partido1||''}</span></td>
+      <td><b>${g.codcandidato2}</b> - ${g.nom_candidato2||''}<br><span style="font-size:0.78em;color:#888">${g.nom_partido2||''}</span></td>
+      <td class="number">${g.num_mpios}</td>
+      <td class="number"><b>${total.toLocaleString('es-CO')}</b></td>
+      <td class="number">${conEv.toLocaleString('es-CO')} <span style="color:#888;font-size:0.85em">(${pct}%)</span></td>
+      <td style="text-align:center;white-space:nowrap">${acciones}</td>
+    </tr>`;
+  });
+  html += '</tbody></table>';
+  cont.innerHTML = html;
+}
+
+async function evVerDetalle(coddepto, c1, c2) {
+  const card = document.getElementById('ev-detalle-card');
+  const titulo = document.getElementById('ev-detalle-titulo');
+  const cont = document.getElementById('ev-detalle-content');
+  card.style.display = 'block';
+  document.getElementById('ev-detalle-loading').style.display = 'block';
+  cont.innerHTML = '';
+  card.scrollIntoView({behavior:'smooth', block:'start'});
+
+  const r = await fetchJSON(`/api/investigaciones-pres/detalle-grupo?coddepto=${coddepto}&codcandidato1=${c1}&codcandidato2=${c2}&por_pagina=500`);
+  document.getElementById('ev-detalle-loading').style.display = 'none';
+  if (!r.data.success) { cont.innerHTML = `<div class="error">${r.data.error}</div>`; return; }
+  const filas = r.data.data || [];
+  titulo.textContent = `📋 Detalle — depto ${coddepto}, candidatos ${c1} vs ${c2}: ${r.data.total} mesas`;
+  if (!filas.length) { cont.innerHTML = '<p style="color:#666">Sin mesas.</p>'; return; }
+
+  let html = '<table style="font-size:12.5px"><thead><tr style="background:#34495e;color:#fff">'
+    + '<th>#</th><th>Depto</th><th>Mpio</th><th>Zona</th><th>Puesto</th><th>Mesa</th>'
+    + '<th class="number">Prec A</th><th class="number">Esc A</th><th class="number">Dif A</th>'
+    + '<th class="number">Prec B</th><th class="number">Esc B</th><th class="number">Dif B</th>'
+    + '<th>Estado</th><th class="number">Evidencias</th></tr></thead><tbody>';
+  filas.forEach((m, i) => {
+    const d1 = m.diferencia1 || 0, d2 = m.diferencia2 || 0;
+    const c1c = d1>0?'#16a34a':d1<0?'#dc3545':'#666';
+    const c2c = d2>0?'#16a34a':d2<0?'#dc3545':'#666';
+    html += `<tr style="background:${i%2?'#f8fafc':'#fff'}">
+      <td>${i+1}</td>
+      <td>${m.nomdepto||''}</td>
+      <td>${m.nommipio||''}</td>
+      <td style="text-align:center">${m.codzona}</td>
+      <td style="font-size:0.92em">${(m.codpuesto||'')} - ${(m.nompuesto||'').substring(0,28)}</td>
+      <td style="text-align:center;font-weight:700">${m.mesa||''}</td>
+      <td class="number">${(m.preconteo1||0).toLocaleString('es-CO')}</td>
+      <td class="number">${(m.dia_valor1||0).toLocaleString('es-CO')}</td>
+      <td class="number" style="color:${c1c};font-weight:700">${d1>0?'+':''}${d1}</td>
+      <td class="number">${(m.preconteo2||0).toLocaleString('es-CO')}</td>
+      <td class="number">${(m.dia_valor2||0).toLocaleString('es-CO')}</td>
+      <td class="number" style="color:${c2c};font-weight:700">${d2>0?'+':''}${d2}</td>
+      <td>${m.estado_reclamacion||'pendiente'}</td>
+      <td class="number">${m.num_evidencias||0}</td>
+    </tr>`;
+  });
+  html += '</tbody></table>';
+  cont.innerHTML = html;
+}
+
+function evCerrarDetalle() {
+  document.getElementById('ev-detalle-card').style.display = 'none';
+}
+
+function evDescargarExcelListado() {
+  window.location.href = BASE_PATH + '/api/evidencias-pres/exportar-excel-listado';
+}
+
+function evDescargarExcelGrupo(coddepto, c1, c2) {
+  window.location.href = BASE_PATH + `/api/evidencias-pres/exportar-excel-grupo?coddepto=${coddepto}&codcandidato1=${c1}&codcandidato2=${c2}`;
+}
+
+async function evDescargarZipGrupo(coddepto, c1, c2) {
+  // Verificar primero si hay evidencias físicas (preflight con HEAD/GET de prueba)
+  try {
+    const r = await fetch(BASE_PATH + `/api/evidencias-pres/exportar-zip-grupo?coddepto=${coddepto}&codcandidato1=${c1}&codcandidato2=${c2}`);
+    if (!r.ok) {
+      let msg = 'Error desconocido';
+      try { msg = (await r.json()).error; } catch(_) {}
+      alert('No se pudo generar el ZIP: ' + msg);
+      return;
+    }
+    const blob = await r.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `evidencias_pres_${c1}_vs_${c2}.zip`;
+    a.click();
+    URL.revokeObjectURL(url);
+  } catch(e) {
+    alert('Error: ' + e.message);
+  }
 }
 
 // ===================== MÓDULO INVESTIGACIONES =====================
@@ -2665,6 +2967,402 @@ async function escEliminarUno(nombre, facceso) {
   const j = await res.json();
   if (j.success) { escCargarHistorial(); escCargarEstadoDia(); }
   else { alert('Error: ' + j.error); }
+}
+
+// ===================== MÓDULO COMISIONES ESCRUTINIO =====================
+let comInit_done = false;
+let comPagina = 1;
+
+async function comInit() {
+  if (comInit_done) return;
+  comInit_done = true;
+  await comRecargarResumen();
+  await comCargarFiltros();
+}
+
+async function comRecargarResumen() {
+  const r = await fetchJSON('/api/comisiones-pres/resumen');
+  if (!r.data.success) return;
+  document.getElementById('com-tot').textContent  = (r.data.total||0).toLocaleString('es-CO');
+  document.getElementById('com-uniq').textContent = (r.data.comisiones||0).toLocaleString('es-CO');
+  let tip='';
+  (r.data.por_tipo||[]).forEach(t => {
+    tip += `<div style="display:flex;justify-content:space-between;padding:2px 0">
+      <span><b>${t.tipo_comision||'—'}</b></span>
+      <span>${(t.n||0).toLocaleString('es-CO')} <span style="color:#94a3b8">(${(t.mesas||0).toLocaleString('es-CO')} mesas)</span></span>
+    </div>`;
+  });
+  document.getElementById('com-tipos').innerHTML = tip || '<i style="color:#94a3b8">Sin datos</i>';
+
+  // Por depto tabla
+  const cont = document.getElementById('com-por-depto-content');
+  const pd = r.data.por_depto || [];
+  if (!pd.length) { cont.innerHTML=''; return; }
+  let html = '<table><thead><tr style="background:#1e3a8a;color:#fff"><th>Depto</th><th>Nombre</th><th class="number">Comisiones</th><th class="number">Asignaciones</th><th class="number">Mesas totales</th></tr></thead><tbody>';
+  pd.forEach(d => {
+    html += `<tr>
+      <td style="text-align:center">${d.coddepto}</td>
+      <td>${d.nomdepto||''}</td>
+      <td class="number">${(d.comisiones||0).toLocaleString('es-CO')}</td>
+      <td class="number">${(d.asignaciones||0).toLocaleString('es-CO')}</td>
+      <td class="number">${(d.total_mesas||0).toLocaleString('es-CO')}</td>
+    </tr>`;
+  });
+  html += '</tbody></table>';
+  cont.innerHTML = html;
+}
+
+async function comCargarFiltros() {
+  const r = await fetchJSON('/api/comisiones-pres/departamentos');
+  const sd = document.getElementById('com-f-depto');
+  sd.innerHTML = '<option value="">Todos</option>';
+  if (r.data.success) r.data.data.forEach(d => sd.innerHTML += `<option value="${d.coddepto}">${d.coddepto} - ${d.nomdepto}</option>`);
+}
+
+async function comOnDeptoChange() {
+  const cd = document.getElementById('com-f-depto').value;
+  const sm = document.getElementById('com-f-mpio');
+  const sz = document.getElementById('com-f-zona');
+  sm.innerHTML='<option value="">Todos</option>'; sm.disabled=true;
+  sz.innerHTML='<option value="">Todas</option>'; sz.disabled=true;
+  if (!cd) return;
+  const r = await fetchJSON(`/api/comisiones-pres/municipios?coddepto=${cd}`);
+  if (r.data.success) {
+    r.data.data.forEach(m => sm.innerHTML += `<option value="${m.codmpio}">${m.codmpio} - ${m.nommpio||'—'}</option>`);
+    sm.disabled = false;
+  }
+}
+
+async function comOnMpioChange() {
+  const cd = document.getElementById('com-f-depto').value;
+  const cm = document.getElementById('com-f-mpio').value;
+  const sz = document.getElementById('com-f-zona');
+  sz.innerHTML='<option value="">Todas</option>'; sz.disabled=true;
+  if (!cm) return;
+  const r = await fetchJSON(`/api/comisiones-pres/zonas?coddepto=${cd}&codmpio=${cm}`);
+  if (r.data.success) {
+    r.data.data.forEach(z => sz.innerHTML += `<option value="${z.zona}">Zona ${z.zona}</option>`);
+    sz.disabled = false;
+  }
+}
+
+async function comCargar() {
+  const f = document.getElementById('com-archivo').files[0];
+  if (!f) { alert('Seleccione un archivo .xlsx'); return; }
+  const btn = document.getElementById('com-btn-cargar');
+  const msg = document.getElementById('com-msg');
+  btn.disabled=true; btn.textContent='⏳ Cargando...';
+  msg.textContent='';
+  try {
+    const fd = new FormData(); fd.append('archivo', f);
+    const r = await fetch(BASE_PATH + '/api/comisiones-pres/cargar-excel', { method:'POST', body: fd });
+    const j = await r.json();
+    if (j.success) {
+      msg.textContent = '✅ ' + j.message; msg.style.color='#16a34a';
+      document.getElementById('com-archivo').value='';
+      comRecargarResumen(); comCargarFiltros();
+    } else {
+      msg.textContent = '❌ ' + j.error; msg.style.color='#dc3545';
+    }
+  } catch(e) {
+    msg.textContent = '❌ ' + e.message; msg.style.color='#dc3545';
+  } finally {
+    btn.disabled=false; btn.textContent='⬆️ Cargar';
+  }
+}
+
+async function comVaciar() {
+  if (!confirm('¿Vaciar TODA la tabla de comisiones? Esta acción no se puede deshacer.')) return;
+  const r = await fetch(BASE_PATH + '/api/comisiones-pres/vaciar', { method:'POST' });
+  const j = await r.json();
+  if (j.success) { alert('✅ Tabla vaciada'); comRecargarResumen(); comCargarFiltros(); }
+  else alert('Error: ' + j.error);
+}
+
+function comLimpiar() {
+  ['com-f-depto','com-f-tipo','com-f-nombre'].forEach(id => document.getElementById(id).value='');
+  const sm=document.getElementById('com-f-mpio'); sm.innerHTML='<option value="">Todos</option>'; sm.disabled=true;
+  const sz=document.getElementById('com-f-zona'); sz.innerHTML='<option value="">Todas</option>'; sz.disabled=true;
+  document.getElementById('com-content').innerHTML=''; document.getElementById('com-pag').innerHTML='';
+  document.getElementById('com-info-total').textContent='';
+}
+
+async function comConsultar(p) {
+  comPagina = p || 1;
+  const btn = document.getElementById('com-btn-buscar');
+  btn.disabled=true; btn.textContent='⏳ Buscando...';
+  document.getElementById('com-loading').style.display='block';
+  document.getElementById('com-content').innerHTML='';
+  try {
+    const q = new URLSearchParams();
+    q.set('coddepto', document.getElementById('com-f-depto').value || '');
+    q.set('codmpio',  document.getElementById('com-f-mpio').value || '');
+    q.set('zona',     document.getElementById('com-f-zona').value || '');
+    q.set('tipo',     document.getElementById('com-f-tipo').value || '');
+    q.set('nombre',   document.getElementById('com-f-nombre').value || '');
+    q.set('pagina', comPagina); q.set('por_pagina', 100);
+    const r = await fetchJSON('/api/comisiones-pres/consultar?' + q.toString());
+    const j = r.data;
+    if (!j.success) { document.getElementById('com-content').innerHTML=`<div class="error">${j.error}</div>`; return; }
+    document.getElementById('com-info-total').textContent = `${j.total.toLocaleString('es-CO')} asignaciones`;
+    if (!j.data.length) { document.getElementById('com-content').innerHTML='<p style="color:#666">Sin resultados.</p>'; return; }
+    let html = '<table style="font-size:12px"><thead><tr style="background:#1e3a8a;color:#fff">'
+      + '<th>#</th><th>Depto</th><th>Mpio</th><th>Zona</th><th>Puesto</th><th>Tipo</th>'
+      + '<th>Comisión</th><th class="number">Mesa Inicial</th><th class="number">Mesa Final</th>'
+      + '<th class="number">Total Mesas</th><th>Lugar Escrutinio</th></tr></thead><tbody>';
+    j.data.forEach((c, i) => {
+      const n = (j.pagina-1)*j.por_pagina + i + 1;
+      const tipoBg = {'GENERAL':'#dbeafe','DEPARTAMENTAL':'#fef3c7','MUNICIPAL':'#dcfce7','ZONAL':'#e0e7ff','AUXILIAR':'#f3e8ff'}[c.tipo_comision] || '#f1f5f9';
+      const tipoColor = {'GENERAL':'#1e3a8a','DEPARTAMENTAL':'#92400e','MUNICIPAL':'#166534','ZONAL':'#3730a3','AUXILIAR':'#6b21a8'}[c.tipo_comision] || '#475569';
+      html += `<tr style="background:${i%2?'#f8fafc':'#fff'}">
+        <td>${n}</td>
+        <td>${c.coddepto||''} ${(c.nomdepto||'').substring(0,15)}</td>
+        <td>${c.codmpio||''} ${(c.nommpio||'').substring(0,18)}</td>
+        <td style="text-align:center">${c.zona||'—'}</td>
+        <td style="font-size:0.9em">${c.codpuesto||''}${c.nompuesto? ' - '+c.nompuesto.substring(0,22):''}</td>
+        <td><span style="background:${tipoBg};color:${tipoColor};padding:2px 8px;border-radius:8px;font-size:0.78em;font-weight:600">${c.tipo_comision||'—'}</span></td>
+        <td>${c.nombre_comision||''}</td>
+        <td class="number">${(c.mesa_inicial||0).toLocaleString('es-CO')}</td>
+        <td class="number">${(c.mesa_final||0).toLocaleString('es-CO')}</td>
+        <td class="number"><b>${(c.total_mesas||0).toLocaleString('es-CO')}</b></td>
+        <td style="font-size:0.85em">${c.lugar_escrutinios||''}${c.direccion_escrutinios? '<br><span style="color:#888">'+c.direccion_escrutinios+'</span>':''}</td>
+      </tr>`;
+    });
+    html += '</tbody></table>';
+    document.getElementById('com-content').innerHTML = html;
+    // paginación
+    const tp = j.paginas; const pagDiv = document.getElementById('com-pag');
+    if (tp > 1) {
+      let pg=''; const bs=a=>`padding:6px 12px;background:${a?'#1e3a8a':'#fff'};color:${a?'#fff':'#1e3a8a'};border:1px solid #1e3a8a;border-radius:4px;cursor:pointer;font-size:13px;font-weight:600`;
+      pg += `<button onclick="comConsultar(1)" ${j.pagina===1?'disabled':''} style="${bs(false)}">«</button>`;
+      pg += `<button onclick="comConsultar(${j.pagina-1})" ${j.pagina===1?'disabled':''} style="${bs(false)}">‹</button>`;
+      const d=Math.max(1,j.pagina-4), h=Math.min(tp,d+9);
+      for (let pp=d; pp<=h; pp++) pg += `<button onclick="comConsultar(${pp})" style="${bs(pp===j.pagina)}">${pp}</button>`;
+      pg += `<button onclick="comConsultar(${j.pagina+1})" ${j.pagina===tp?'disabled':''} style="${bs(false)}">›</button>`;
+      pg += `<button onclick="comConsultar(${tp})" ${j.pagina===tp?'disabled':''} style="${bs(false)}">»</button>`;
+      pg += `<span style="margin-left:10px;color:#666;font-size:13px">Página ${j.pagina} de ${tp}</span>`;
+      pagDiv.innerHTML = pg;
+    } else pagDiv.innerHTML='';
+  } finally {
+    btn.disabled=false; btn.textContent='🔍 Buscar';
+    document.getElementById('com-loading').style.display='none';
+  }
+}
+
+// ===================== MÓDULO AGE — Observaciones =====================
+let ageInit_done = false;
+let agePagina = 1;
+let agePollHandle = null;
+
+async function ageInit() {
+  if (ageInit_done) return;
+  ageInit_done = true;
+  await ageRecargarFiltros();
+  await ageRecargarResumen();
+}
+
+async function ageRecargarFiltros() {
+  // deptos + tipos
+  const r = await fetchJSON('/api/age-pres/filtros');
+  if (!r.data.success) return;
+  const sd = document.getElementById('age-f-depto'); sd.innerHTML='<option value="">Todos</option>';
+  (r.data.deptos||[]).forEach(d => sd.innerHTML += `<option value="${d.coddepto}">${d.coddepto} - ${d.nomdepto}</option>`);
+  const st = document.getElementById('age-f-tipo'); st.innerHTML='<option value="">Todos</option>';
+  (r.data.tipos||[]).forEach(t => st.innerHTML += `<option value="${t}">${t}</option>`);
+}
+
+async function ageCambiarFiltro(nivel) {
+  const depto = document.getElementById('age-f-depto').value;
+  const mpio  = document.getElementById('age-f-mpio').value;
+  const zona  = document.getElementById('age-f-zona').value;
+  const sm = document.getElementById('age-f-mpio');
+  const sz = document.getElementById('age-f-zona');
+  const sp = document.getElementById('age-f-puesto');
+
+  if (nivel === 'depto') {
+    sm.innerHTML='<option value="">Todos</option>'; sm.disabled=true;
+    sz.innerHTML='<option value="">Todas</option>'; sz.disabled=true;
+    sp.innerHTML='<option value="">Todos</option>'; sp.disabled=true;
+    if (!depto) return;
+    const r = await fetchJSON(`/api/age-pres/filtros?depto=${depto}`);
+    if (r.data.success) {
+      r.data.mpios.forEach(m => sm.innerHTML += `<option value="${m.codmpio}">${m.codmpio} - ${m.nommpio||'—'}</option>`);
+      sm.disabled = false;
+    }
+  } else if (nivel === 'mpio') {
+    sz.innerHTML='<option value="">Todas</option>'; sz.disabled=true;
+    sp.innerHTML='<option value="">Todos</option>'; sp.disabled=true;
+    if (!mpio) return;
+    const r = await fetchJSON(`/api/age-pres/filtros?depto=${depto}&mpio=${mpio}`);
+    if (r.data.success) {
+      r.data.zonas.forEach(z => sz.innerHTML += `<option value="${z}">Zona ${z}</option>`);
+      sz.disabled = false;
+    }
+  } else if (nivel === 'zona') {
+    sp.innerHTML='<option value="">Todos</option>'; sp.disabled=true;
+    if (!zona) return;
+    const r = await fetchJSON(`/api/age-pres/filtros?depto=${depto}&mpio=${mpio}&zona=${zona}`);
+    if (r.data.success) {
+      r.data.puestos.forEach(p => sp.innerHTML += `<option value="${p.codpuesto}">${p.codpuesto} - ${p.nompuesto||'—'}</option>`);
+      sp.disabled = false;
+    }
+  }
+}
+
+async function ageRecargarResumen() {
+  const r = await fetchJSON('/api/age-pres/resumen');
+  if (!r.data.success) return;
+  document.getElementById('age-tot-obs').textContent  = (r.data.total||0).toLocaleString('es-CO');
+  document.getElementById('age-tot-arch').textContent = (r.data.archivos||0).toLocaleString('es-CO');
+  // Por tipo
+  const cont = document.getElementById('age-por-tipo');
+  if (!r.data.por_tipo || !r.data.por_tipo.length) { cont.innerHTML=''; return; }
+  let html = '<div style="display:flex;gap:8px;flex-wrap:wrap">';
+  r.data.por_tipo.forEach(t => {
+    html += `<span style="background:#f1f5f9;color:#1e3a8a;padding:6px 12px;border-radius:14px;font-size:0.85em"><b>${t.cantidad.toLocaleString('es-CO')}</b> ${t.tipo_observacion}</span>`;
+  });
+  html += '</div>';
+  cont.innerHTML = html;
+}
+
+async function ageEscanear() {
+  const carpeta = document.getElementById('age-carpeta').value.trim();
+  if (!carpeta) { alert('Indique la carpeta AGE'); return; }
+  const info = document.getElementById('age-escaneo-info');
+  info.textContent = '⏳ Escaneando...';
+  const r = await fetch(BASE_PATH + '/api/age-pres/escanear', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ carpeta })
+  });
+  const j = await r.json();
+  if (!j.success) { info.textContent = '❌ ' + j.error; return; }
+  info.innerHTML = `✅ <strong>${j.archivos}</strong> archivos .docx encontrados en <code>${j.carpeta}</code>`;
+  const btn = document.getElementById('age-btn-iniciar');
+  btn.disabled = j.archivos === 0;
+  btn.style.opacity = j.archivos === 0 ? '0.5' : '1';
+}
+
+async function ageIniciar() {
+  const carpeta = document.getElementById('age-carpeta').value.trim();
+  const procesados = document.getElementById('age-procesados').value.trim();
+  if (!carpeta) { alert('Indique la carpeta'); return; }
+  if (!confirm('¿Iniciar importación? El proceso correrá en background y mostrará progreso.')) return;
+  const r = await fetch(BASE_PATH + '/api/age-pres/cargar-carpeta', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ carpeta, procesados })
+  });
+  const j = await r.json();
+  if (!j.success) { alert('Error: ' + j.error); return; }
+  document.getElementById('age-progress').style.display = 'block';
+  if (agePollHandle) clearInterval(agePollHandle);
+  agePollHandle = setInterval(agePollProgreso, 1500);
+}
+
+async function agePollProgreso() {
+  const r = await fetchJSON('/api/age-pres/progreso');
+  if (!r.data.success) return;
+  const p = r.data;
+  const pct = p.total > 0 ? Math.round(p.procesados/p.total*100) : 0;
+  document.getElementById('age-pg-texto').textContent = p.activo ? 'Procesando...' : (p.terminado ? '✅ Completado' : 'En espera');
+  document.getElementById('age-pg-pct').textContent = pct + '%';
+  document.getElementById('age-pg-bar').style.width = pct + '%';
+  document.getElementById('age-pg-archivos').textContent = `${p.procesados}/${p.total}`;
+  document.getElementById('age-pg-registros').textContent = (p.registros||0).toLocaleString('es-CO');
+  document.getElementById('age-pg-actual').textContent = p.actual || '—';
+  if (p.errores && p.errores.length) {
+    document.getElementById('age-pg-errores').innerHTML = `❌ ${p.errores.length} error(es): ${p.errores.slice(0,3).join('; ')}`;
+  }
+  if (!p.activo && p.terminado) {
+    clearInterval(agePollHandle); agePollHandle = null;
+    ageRecargarResumen(); ageRecargarFiltros();
+  }
+}
+
+async function ageVaciar() {
+  if (!confirm('¿Vaciar TODA la tabla AGE? Esta acción no se puede deshacer.')) return;
+  const r = await fetch(BASE_PATH + '/api/age-pres/vaciar', { method:'POST' });
+  const j = await r.json();
+  if (j.success) { alert('✅ Tabla vaciada'); ageRecargarResumen(); ageRecargarFiltros(); }
+  else alert('Error: ' + j.error);
+}
+
+function ageLimpiar() {
+  ['age-f-depto','age-f-tipo','age-f-corp','age-f-mesa','age-f-partido'].forEach(id => document.getElementById(id).value='');
+  const sm=document.getElementById('age-f-mpio'); sm.innerHTML='<option value="">Todos</option>'; sm.disabled=true;
+  const sz=document.getElementById('age-f-zona'); sz.innerHTML='<option value="">Todas</option>'; sz.disabled=true;
+  const sp=document.getElementById('age-f-puesto'); sp.innerHTML='<option value="">Todos</option>'; sp.disabled=true;
+  document.getElementById('age-consulta-content').innerHTML='';
+  document.getElementById('age-consulta-pag').innerHTML='';
+  document.getElementById('age-info-total').textContent='';
+}
+
+async function ageConsultar(p) {
+  agePagina = p || 1;
+  const btn = document.getElementById('age-btn-consultar');
+  btn.disabled=true; btn.textContent='⏳ Buscando...';
+  document.getElementById('age-consulta-loading').style.display='block';
+  document.getElementById('age-consulta-content').innerHTML='';
+  try {
+    const q = new URLSearchParams();
+    q.set('depto', document.getElementById('age-f-depto').value || '');
+    q.set('mpio',  document.getElementById('age-f-mpio').value || '');
+    q.set('zona',  document.getElementById('age-f-zona').value || '');
+    q.set('puesto',document.getElementById('age-f-puesto').value || '');
+    q.set('mesa',  document.getElementById('age-f-mesa').value || '');
+    q.set('corporacion', document.getElementById('age-f-corp').value || '');
+    q.set('tipo',  document.getElementById('age-f-tipo').value || '');
+    q.set('partido', document.getElementById('age-f-partido').value || '');
+    q.set('pagina', agePagina);
+    q.set('por_pagina', 100);
+    const r = await fetchJSON('/api/age-pres/consultar?' + q.toString());
+    const j = r.data;
+    if (!j.success) { document.getElementById('age-consulta-content').innerHTML=`<div class="error">${j.error}</div>`; return; }
+    document.getElementById('age-info-total').textContent = `${j.total.toLocaleString('es-CO')} observaciones`;
+    if (!j.data.length) { document.getElementById('age-consulta-content').innerHTML='<p style="color:#666">Sin resultados.</p>'; return; }
+    let html = '<table style="font-size:12px"><thead><tr style="background:#1e3a8a;color:#fff">'
+      + '<th>#</th><th>Depto</th><th>Mpio</th><th>Zona</th><th>Puesto</th><th>Mesa</th>'
+      + '<th>Corp</th><th>Tipo</th><th>Partido</th><th style="max-width:500px">Observación</th>'
+      + '<th>Tach</th><th>Rec</th><th>Archivo</th></tr></thead><tbody>';
+    j.data.forEach((o, i) => {
+      const n = (j.pagina-1)*j.por_pagina + i + 1;
+      const tachColor = o.tiene_tachaduras ? '#dc3545' : '#94a3b8';
+      const recColor  = o.tiene_recuento   ? '#f59e0b' : '#94a3b8';
+      html += `<tr style="background:${i%2?'#f8fafc':'#fff'}">
+        <td>${n}</td>
+        <td>${o.coddepto||''} ${(o.nomdepto||'').substring(0,15)}</td>
+        <td>${o.codmpio||''} ${(o.nommpio||'').substring(0,15)}</td>
+        <td>${o.zona||''}</td>
+        <td style="font-size:0.9em">${o.codpuesto||''} ${(o.nompuesto||'').substring(0,18)}</td>
+        <td style="text-align:center;font-weight:700">${o.mesa||''}</td>
+        <td>${o.corporacion||''}</td>
+        <td><span style="font-size:0.78em;background:#e0e7ff;color:#1e3a8a;padding:2px 6px;border-radius:8px">${o.tipo_observacion||''}</span></td>
+        <td style="font-size:0.85em">${o.nompartido||''}</td>
+        <td style="max-width:500px;white-space:normal;font-size:0.85em">${(o.observacion||'').substring(0,300)}</td>
+        <td style="text-align:center;color:${tachColor}">${o.tiene_tachaduras?'✓':'—'}</td>
+        <td style="text-align:center;color:${recColor}">${o.tiene_recuento?'✓':'—'}</td>
+        <td style="font-size:0.78em;color:#888">${o.archivo||''}</td>
+      </tr>`;
+    });
+    html += '</tbody></table>';
+    document.getElementById('age-consulta-content').innerHTML = html;
+    // Paginación
+    const pagDiv = document.getElementById('age-consulta-pag');
+    const tp = j.paginas;
+    if (tp > 1) {
+      let pg=''; const bs=a=>`padding:6px 12px;background:${a?'#1e3a8a':'#fff'};color:${a?'#fff':'#1e3a8a'};border:1px solid #1e3a8a;border-radius:4px;cursor:pointer;font-size:13px;font-weight:600`;
+      pg += `<button onclick="ageConsultar(1)" ${j.pagina===1?'disabled':''} style="${bs(false)}">«</button>`;
+      pg += `<button onclick="ageConsultar(${j.pagina-1})" ${j.pagina===1?'disabled':''} style="${bs(false)}">‹</button>`;
+      const d=Math.max(1,j.pagina-4), h=Math.min(tp,d+9);
+      for (let pp=d; pp<=h; pp++) pg += `<button onclick="ageConsultar(${pp})" style="${bs(pp===j.pagina)}">${pp}</button>`;
+      pg += `<button onclick="ageConsultar(${j.pagina+1})" ${j.pagina===tp?'disabled':''} style="${bs(false)}">›</button>`;
+      pg += `<button onclick="ageConsultar(${tp})" ${j.pagina===tp?'disabled':''} style="${bs(false)}">»</button>`;
+      pg += `<span style="margin-left:10px;color:#666;font-size:13px">Página ${j.pagina} de ${tp}</span>`;
+      pagDiv.innerHTML = pg;
+    } else pagDiv.innerHTML='';
+  } finally {
+    btn.disabled=false; btn.textContent='🔍 Consultar';
+    document.getElementById('age-consulta-loading').style.display='none';
+  }
 }
 
 // Auto-check sesión al cargar
