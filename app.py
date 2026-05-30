@@ -1414,6 +1414,197 @@ def inv_pres_comparar():
         logger.exception('[inv-pres/comparar]')
         return jsonify({'success': False, 'error': str(e)}), 500
 
+@app.route('/api/investigaciones-pres/mesas-cero', methods=['POST'])
+def inv_pres_mesas_cero():
+    """Busca mesas donde un candidato tiene 0 votos según la fuente:
+      - 'escrutinio' (default): 0 en día N, mesa con votos en escrutinio
+      - 'preconteo': 0 en preconteo, mesa con votos en preconteo
+      - 'perdidos':  preconteo > 0  PERO  escrutinio día N = 0 (votos que desaparecieron)
+    """
+    err = _require_session()
+    if err: return err
+    try:
+        d = request.get_json() or {}
+        codcand = int(d.get('codcandidato') or 0)
+        cd = d.get('coddepto')
+        cm = d.get('codmipio')
+        numdia = d.get('numdia')
+        fuente = (d.get('fuente') or 'escrutinio').lower()
+        pagina = max(1, int(d.get('pagina', 1)))
+        por_pagina = min(2000, max(20, int(d.get('por_pagina', 100))))
+
+        if not codcand:
+            return jsonify({'success': False, 'error': 'codcandidato requerido'}), 400
+        if fuente not in ('escrutinio', 'preconteo', 'perdidos'):
+            return jsonify({'success': False, 'error': "fuente inválida (use escrutinio/preconteo/perdidos)"}), 400
+
+        ultimo = _ultimo_dia_seguimiento()
+        usa_escr = fuente in ('escrutinio', 'perdidos')
+        if usa_escr and ultimo == 0:
+            return jsonify({'success': True, 'filas': [], 'total': 0,
+                            'mensaje': 'No hay días procesados (escrutinio).'})
+        numdia_use = int(numdia) if numdia else ultimo
+        expr_dia = _build_ultimo_valor_expr(numdia_use) if usa_escr else '0'
+
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT codcandidato, codpartido, nomcandidato,
+                           (SELECT nompartido FROM partidos_presidencial_2026 WHERE codpartido=c.codpartido) AS nompartido
+                    FROM candidatos_presidencial_2026 c
+                    WHERE codcandidato = %s
+                """, (codcand,))
+                ci = cur.fetchone()
+        if not ci:
+            return jsonify({'success': False, 'error': 'Candidato no encontrado'}), 404
+
+        where_geo, params_geo = [], []
+        if cd is not None: where_geo.append('dv.coddepto=%s'); params_geo.append(int(cd))
+        if cm is not None: where_geo.append('dv.codmipio=%s'); params_geo.append(int(cm))
+        geo_sql = ' AND '.join(where_geo) if where_geo else '1=1'
+
+        # CTEs según fuente
+        if fuente == 'escrutinio':
+            # mesas con votos en escrutinio + candidato con 0 votos en escrutinio
+            cte_mesas = f"""SELECT DISTINCT idmesa FROM seguimiento_escrutinio_presidencial_2026 WHERE ({expr_dia}) > 0"""
+            cte_cand  = f"""SELECT idmesa, SUM({expr_dia}) AS votos FROM seguimiento_escrutinio_presidencial_2026
+                              WHERE codcandidato=%s GROUP BY idmesa"""
+            label_votos = 'Votos cand. (escrutinio)'
+        elif fuente == 'preconteo':
+            cte_mesas = """SELECT DISTINCT idmesa FROM seguimiento_escrutinio_presidencial_2026 WHERE COALESCE(preconteo,0) > 0"""
+            cte_cand  = """SELECT idmesa, SUM(COALESCE(preconteo,0)) AS votos FROM seguimiento_escrutinio_presidencial_2026
+                            WHERE codcandidato=%s GROUP BY idmesa"""
+            label_votos = 'Votos cand. (preconteo)'
+        else:  # perdidos
+            # candidato tenía votos en preconteo PERO 0 en escrutinio día N
+            cte_mesas = f"""SELECT DISTINCT idmesa FROM seguimiento_escrutinio_presidencial_2026 WHERE ({expr_dia}) > 0"""
+            cte_cand  = f"""SELECT idmesa,
+                                   SUM(COALESCE(preconteo,0)) AS preconteo_cand,
+                                   SUM({expr_dia}) AS votos
+                            FROM seguimiento_escrutinio_presidencial_2026
+                            WHERE codcandidato=%s GROUP BY idmesa"""
+            label_votos = 'Preconteo cand → Día N'
+
+        # Construcción de query
+        if fuente == 'perdidos':
+            sql = f"""
+                WITH mesas_con_voto AS ({cte_mesas}),
+                     voto_cand     AS ({cte_cand})
+                SELECT mv.idmesa,
+                       dv.coddepto, dv.nomdepto, dv.codmipio, dv.nommipio,
+                       dv.codzona, dv.codpuesto, dv.nompuesto, dm.mesa,
+                       COALESCE(vc.preconteo_cand, 0) AS preconteo_cand,
+                       COALESCE(vc.votos, 0)          AS votos_candidato,
+                       (SELECT COUNT(*) FROM evidencias_presidencial_2026 e
+                         WHERE e.idmesa=mv.idmesa AND e.codcandidato=%s
+                           AND COALESCE(e.tipo_formulario,'') NOT IN ('NO_E14','SIN_EVIDENCIA')) AS num_evidencias,
+                       (SELECT 1 FROM evidencias_presidencial_2026 e
+                         WHERE e.idmesa=mv.idmesa AND e.tipo_formulario='SIN_EVIDENCIA' LIMIT 1) AS sin_evidencia,
+                       (SELECT usuario FROM reservas_mesa_presidencial_2026 r
+                         WHERE r.idmesa=mv.idmesa AND r.codcandidato=%s LIMIT 1) AS reserva
+                FROM mesas_con_voto mv
+                JOIN divipolmesa_presidencial_2026 dm ON dm.idmesa = mv.idmesa
+                JOIN divipol_presidencial_2026 dv ON dv.iddivipol = dm.iddivipol AND dv.clase='P'
+                LEFT JOIN voto_cand vc ON vc.idmesa = mv.idmesa
+                WHERE COALESCE(vc.preconteo_cand, 0) > 0
+                  AND COALESCE(vc.votos, 0) = 0
+                  AND {geo_sql}
+            """
+        else:
+            sql = f"""
+                WITH mesas_con_voto AS ({cte_mesas}),
+                     voto_cand     AS ({cte_cand})
+                SELECT mv.idmesa,
+                       dv.coddepto, dv.nomdepto, dv.codmipio, dv.nommipio,
+                       dv.codzona, dv.codpuesto, dv.nompuesto, dm.mesa,
+                       COALESCE(vc.votos, 0) AS votos_candidato,
+                       (SELECT COUNT(*) FROM evidencias_presidencial_2026 e
+                         WHERE e.idmesa=mv.idmesa AND e.codcandidato=%s
+                           AND COALESCE(e.tipo_formulario,'') NOT IN ('NO_E14','SIN_EVIDENCIA')) AS num_evidencias,
+                       (SELECT 1 FROM evidencias_presidencial_2026 e
+                         WHERE e.idmesa=mv.idmesa AND e.tipo_formulario='SIN_EVIDENCIA' LIMIT 1) AS sin_evidencia,
+                       (SELECT usuario FROM reservas_mesa_presidencial_2026 r
+                         WHERE r.idmesa=mv.idmesa AND r.codcandidato=%s LIMIT 1) AS reserva
+                FROM mesas_con_voto mv
+                JOIN divipolmesa_presidencial_2026 dm ON dm.idmesa = mv.idmesa
+                JOIN divipol_presidencial_2026 dv ON dv.iddivipol = dm.iddivipol AND dv.clase='P'
+                LEFT JOIN voto_cand vc ON vc.idmesa = mv.idmesa
+                WHERE COALESCE(vc.votos, 0) = 0
+                  AND {geo_sql}
+            """
+
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                params = [codcand, codcand, codcand] + params_geo
+                cur.execute(f"SELECT COUNT(*) AS n FROM ({sql}) tot", params)
+                total = cur.fetchone()['n']
+                offset = (pagina - 1) * por_pagina
+                cur.execute(sql + " ORDER BY dv.coddepto, dv.codmipio, dm.mesa LIMIT %s OFFSET %s",
+                            params + [por_pagina, offset])
+                filas = cur.fetchall()
+
+        return jsonify({
+            'success': True,
+            'fuente': fuente, 'label_votos': label_votos,
+            'total': total, 'pagina': pagina, 'por_pagina': por_pagina,
+            'paginas': (total + por_pagina - 1) // por_pagina,
+            'numdia': numdia_use, 'ultimo_dia': ultimo,
+            'codcandidato': codcand, 'nomcandidato': ci['nomcandidato'],
+            'codpartido': ci['codpartido'], 'nompartido': ci['nompartido'],
+            'filas': filas
+        })
+    except Exception as e:
+        logger.exception('[inv-pres/mesas-cero]')
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/investigaciones-pres/crear-mesas-cero', methods=['POST'])
+def inv_pres_crear_mesas_cero():
+    """Crea investigación de mesas cero (1 candidato, lado B vacío)."""
+    err = _require_session()
+    if err: return err
+    try:
+        d = request.get_json() or {}
+        mesas = d.get('mesas') or []
+        codcand = int(d.get('codcandidato') or 0)
+        nom = d.get('nomcandidato', '')
+        codpart = d.get('codpartido')
+        nompart = d.get('nompartido', '')
+        numdia = int(d.get('numdia') or 0)
+        usuario = session.get('cedula', '')
+
+        if not mesas or not codcand:
+            return jsonify({'success': False, 'error': 'mesas + codcandidato requeridos'}), 400
+
+        creadas = 0
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                for m in mesas:
+                    cur.execute("""
+                        INSERT INTO investigaciones_presidencial_2026 (
+                            idmesa, nomdepto, nommipio, nompuesto, mesa,
+                            coddepto, codmipio, codzona, codpuesto,
+                            codcandidato1, nom_candidato1, codpartido1, nom_partido1,
+                            preconteo1, dia_valor1, diferencia1,
+                            codcandidato2, nom_candidato2,
+                            numdia, usuario_creacion
+                        ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,
+                                  %s,%s,%s,%s,%s,%s,%s,
+                                  %s,%s,%s,%s)
+                        ON CONFLICT (idmesa, codcandidato1, codcandidato2) DO NOTHING
+                    """, (m.get('idmesa'), m.get('nomdepto'), m.get('nommipio'),
+                          m.get('nompuesto'), m.get('mesa'),
+                          m.get('coddepto'), m.get('codmipio'), m.get('codzona'), m.get('codpuesto'),
+                          codcand, nom, codpart, nompart,
+                          0, 0, 0,
+                          0, 'MESA CERO',
+                          numdia, usuario))
+                    creadas += cur.rowcount
+                conn.commit()
+        return jsonify({'success': True, 'creadas': creadas, 'total': len(mesas)})
+    except Exception as e:
+        logger.exception('[inv-pres/crear-mesas-cero]')
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 @app.route('/api/investigaciones-pres/crear', methods=['POST'])
 def inv_pres_crear():
     """Crea registros de investigación a partir de mesas comparadas."""

@@ -579,6 +579,50 @@
           <div id="inv-paginacion" style="display:flex;gap:6px;align-items:center;justify-content:center;flex-wrap:wrap;margin-top:12px"></div>
         </div>
 
+        <!-- Mesas Cero -->
+        <div class="card">
+          <h2>🚫 Mesas en Cero — un candidato sin votos</h2>
+          <p style="color:#666;font-size:0.88em;margin-bottom:10px">
+            Busca mesas donde el candidato tiene <b>0 votos</b> en el día seleccionado, pero la mesa
+            SÍ tiene votación reportada (otros candidatos &gt; 0). Sirve para crear investigaciones
+            específicas de mesas sospechosamente "en cero" para un candidato.
+          </p>
+          <div class="filters-grid">
+            <div class="filter-group">
+              <label>Fuente</label>
+              <select id="mc-fuente" onchange="mcOnFuenteChange()" style="padding:7px 9px;border:1px solid #d1d5db;border-radius:5px;font-size:13.5px">
+                <option value="escrutinio">Escrutinio (día N)</option>
+                <option value="preconteo">Preconteo</option>
+                <option value="perdidos">Votos desaparecidos (preconteo → escrutinio = 0)</option>
+              </select>
+            </div>
+            <div class="filter-group" id="mc-grp-dia">
+              <label>Día escrutinio</label>
+              <select id="mc-dia"><option value="">Último día</option></select>
+            </div>
+            <div class="filter-group">
+              <label>Candidato</label>
+              <select id="mc-cand"><option value="">-- Seleccione --</option></select>
+            </div>
+            <div class="filter-group">
+              <label>Departamento</label>
+              <select id="mc-depto" onchange="mcOnDeptoChange()"><option value="">Todos</option></select>
+            </div>
+            <div class="filter-group">
+              <label>Municipio</label>
+              <select id="mc-mpio" disabled><option value="">Todos</option></select>
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px">
+            <button onclick="mcBuscar(1)" id="mc-btn-buscar" style="padding:9px 22px;background:linear-gradient(135deg,#dc3545,#c82333);color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:600">🚫 Buscar Mesas Cero</button>
+            <button onclick="mcLimpiar()" style="padding:8px 14px;background:#94a3b8;color:#fff;border:none;border-radius:5px;cursor:pointer">🧹 Limpiar</button>
+            <span style="margin-left:auto;color:#666;font-size:0.88em" id="mc-info-total"></span>
+          </div>
+          <div id="mc-loading" class="loading" style="display:none">Buscando...</div>
+          <div id="mc-content" style="margin-top:14px;overflow-x:auto"></div>
+          <div id="mc-paginacion" style="display:flex;gap:6px;align-items:center;justify-content:center;flex-wrap:wrap;margin-top:12px"></div>
+        </div>
+
         <!-- Listado investigaciones -->
         <div class="card">
           <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
@@ -1539,15 +1583,205 @@ async function invInit() {
   const rdep = await fetchJSON('/api/consulta-escrutinio/filtros/departamentos');
   const sd = document.getElementById('inv-depto');
   if (rdep.data.success) rdep.data.data.forEach(d => sd.innerHTML += `<option value="${d.coddepto}">${d.coddepto} - ${d.nomdepto}</option>`);
-  // Candidatos en ambos selects
+  // Candidatos en ambos selects (compara + mesas cero)
   const rc = await fetchJSON('/api/consulta-escrutinio/filtros/candidatos');
   if (rc.data.success) {
-    ['inv-cand1','inv-cand2'].forEach(id => {
+    ['inv-cand1','inv-cand2','mc-cand'].forEach(id => {
       const s = document.getElementById(id);
-      rc.data.data.forEach(c => s.innerHTML += `<option value="${c.codcandidato}" data-cp="${c.codpartido}" data-np="${c.nompartido||''}">${c.codcandidato} - ${c.nomcandidato}</option>`);
+      if (s) rc.data.data.forEach(c => s.innerHTML += `<option value="${c.codcandidato}" data-cp="${c.codpartido}" data-np="${c.nompartido||''}">${c.codcandidato} - ${c.nomcandidato}</option>`);
     });
   }
+  // Días + deptos también para mesas cero
+  if (rd.data.success) rd.data.data.forEach(d => {
+    const sel = document.getElementById('mc-dia');
+    if (sel) sel.innerHTML += `<option value="${d.numdia}">Día ${d.numdia} (${d.facceso})</option>`;
+  });
+  if (rdep.data.success) rdep.data.data.forEach(d => {
+    const sel = document.getElementById('mc-depto');
+    if (sel) sel.innerHTML += `<option value="${d.coddepto}">${d.coddepto} - ${d.nomdepto}</option>`;
+  });
   invCargarListado();
+}
+
+// ===== Mesas Cero =====
+let mcData = null;
+
+async function mcOnDeptoChange() {
+  const cd = document.getElementById('mc-depto').value;
+  const sm = document.getElementById('mc-mpio');
+  sm.innerHTML = '<option value="">Todos</option>'; sm.disabled = true;
+  if (!cd) return;
+  const r = await fetchJSON(`/api/consulta-escrutinio/filtros/municipios?coddepto=${cd}`);
+  if (r.data.success) {
+    r.data.data.forEach(m => sm.innerHTML += `<option value="${m.codmipio}">${m.codmipio} - ${m.nommipio||'—'}</option>`);
+    sm.disabled = false;
+  }
+}
+
+function mcLimpiar() {
+  document.getElementById('mc-fuente').value = 'escrutinio';
+  document.getElementById('mc-dia').value = '';
+  document.getElementById('mc-cand').value = '';
+  document.getElementById('mc-depto').value = '';
+  const sm = document.getElementById('mc-mpio'); sm.innerHTML='<option value="">Todos</option>'; sm.disabled=true;
+  document.getElementById('mc-content').innerHTML = '';
+  document.getElementById('mc-paginacion').innerHTML = '';
+  document.getElementById('mc-info-total').textContent = '';
+  mcOnFuenteChange();
+  mcData = null;
+}
+
+function mcOnFuenteChange() {
+  const f = document.getElementById('mc-fuente').value;
+  const grpDia = document.getElementById('mc-grp-dia');
+  // Si solo es preconteo no aplica día; en escrutinio y perdidos sí
+  grpDia.style.display = (f === 'preconteo') ? 'none' : '';
+}
+
+async function mcBuscar(pagina) {
+  const ccd = document.getElementById('mc-cand').value;
+  if (!ccd) { alert('Seleccione un candidato'); return; }
+  const sel = document.getElementById('mc-cand').selectedOptions[0];
+  const btn = document.getElementById('mc-btn-buscar');
+  btn.disabled = true; btn.textContent = '⏳ Buscando...';
+  document.getElementById('mc-loading').style.display = 'block';
+  document.getElementById('mc-content').innerHTML = '';
+  try {
+    const body = {
+      codcandidato: parseInt(ccd),
+      fuente: document.getElementById('mc-fuente').value,
+      coddepto: document.getElementById('mc-depto').value || null,
+      codmipio: document.getElementById('mc-mpio').value || null,
+      numdia: document.getElementById('mc-dia').value || null,
+      pagina: pagina || 1, por_pagina: 100
+    };
+    const r = await fetch(BASE_PATH + '/api/investigaciones-pres/mesas-cero', {
+      method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)
+    });
+    const j = await r.json();
+    if (!j.success) { document.getElementById('mc-content').innerHTML = `<div class="error">${j.error}</div>`; return; }
+    j._codpartido = sel?.dataset?.cp;
+    mcData = j;
+    mcRender(j);
+  } catch(e) {
+    document.getElementById('mc-content').innerHTML = `<div class="error">${e.message}</div>`;
+  } finally {
+    btn.disabled = false; btn.textContent = '🚫 Buscar Mesas Cero';
+    document.getElementById('mc-loading').style.display = 'none';
+  }
+}
+
+function mcRender(j) {
+  const cont = document.getElementById('mc-content');
+  const info = document.getElementById('mc-info-total');
+  const labelFuente = j.fuente === 'preconteo' ? 'Preconteo' :
+                      j.fuente === 'perdidos'  ? `Preconteo→Día ${j.numdia}` :
+                                                 `Día ${j.numdia}`;
+  info.textContent = `${j.total.toLocaleString('es-CO')} mesas — Fuente: ${labelFuente} — Candidato: ${j.nomcandidato}`;
+  if (!j.filas.length) { cont.innerHTML = '<p style="color:#666">Sin resultados.</p>'; return; }
+
+  const esPerdidos = j.fuente === 'perdidos';
+  let html = `<table style="font-size:12.5px"><thead><tr style="background:linear-gradient(135deg,#dc3545,#c82333);color:#fff">
+    <th>#</th><th>Depto</th><th>Municipio</th><th>Zona</th><th>Puesto</th><th>Mesa</th>`
+    + (esPerdidos ? `<th class="number">Preconteo</th><th class="number">Día ${j.numdia}</th>`
+                  : `<th class="number">${j.label_votos||'Votos'}</th>`)
+    + `<th>Estado</th></tr></thead><tbody>`;
+  j.filas.forEach((f, i) => {
+    const n = (j.pagina-1)*j.por_pagina + i + 1;
+    let estado;
+    if (f.sin_evidencia) estado = '🚫 Sin ev. confirmada';
+    else if (f.num_evidencias > 0) estado = `✅ ${f.num_evidencias} ev.`;
+    else if (f.reserva) estado = `⏳ ${f.reserva}`;
+    else estado = '📎 Pendiente';
+    html += `<tr style="background:${i%2?'#f8fafc':'#fff'}">
+      <td>${n}</td>
+      <td>${f.nomdepto||''}</td>
+      <td>${f.nommipio||''}</td>
+      <td style="text-align:center">${f.codzona}</td>
+      <td style="font-size:0.92em">${(f.codpuesto||'')} - ${(f.nompuesto||'').substring(0,28)}</td>
+      <td style="text-align:center;font-weight:700">${f.mesa||''}</td>`
+      + (esPerdidos
+         ? `<td class="number" style="color:#16a34a;font-weight:700">${(f.preconteo_cand||0).toLocaleString('es-CO')}</td>
+            <td class="number" style="color:#dc3545;font-weight:700">${(f.votos_candidato||0).toLocaleString('es-CO')}</td>`
+         : `<td class="number" style="color:#dc3545;font-weight:700">${(f.votos_candidato||0).toLocaleString('es-CO')}</td>`)
+      + `<td style="text-align:center;font-size:0.85em">${estado}</td>
+    </tr>`;
+  });
+  html += '</tbody></table>';
+  html += `<div style="margin-top:14px;text-align:center">
+    <button onclick="mcCrearInvestigacion()" id="mc-btn-crear"
+      style="padding:10px 26px;background:linear-gradient(135deg,#16a34a,#22c55e);color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:700">
+      ✅ Crear Investigación con estas ${j.total.toLocaleString('es-CO')} mesas en cero
+    </button>
+  </div>`;
+  cont.innerHTML = html;
+
+  // Paginación
+  const pagDiv = document.getElementById('mc-paginacion');
+  const tp = j.paginas;
+  if (tp > 1) {
+    let pg = '';
+    const bs = a => `padding:6px 12px;background:${a?'#dc3545':'#fff'};color:${a?'#fff':'#dc3545'};border:1px solid #dc3545;border-radius:4px;cursor:pointer;font-size:13px;font-weight:600`;
+    pg += `<button onclick="mcBuscar(1)" ${j.pagina===1?'disabled':''} style="${bs(false)}">«</button>`;
+    pg += `<button onclick="mcBuscar(${j.pagina-1})" ${j.pagina===1?'disabled':''} style="${bs(false)}">‹</button>`;
+    const d = Math.max(1, j.pagina-4), h = Math.min(tp, d+9);
+    for (let p=d; p<=h; p++) pg += `<button onclick="mcBuscar(${p})" style="${bs(p===j.pagina)}">${p}</button>`;
+    pg += `<button onclick="mcBuscar(${j.pagina+1})" ${j.pagina===tp?'disabled':''} style="${bs(false)}">›</button>`;
+    pg += `<button onclick="mcBuscar(${tp})" ${j.pagina===tp?'disabled':''} style="${bs(false)}">»</button>`;
+    pg += `<span style="margin-left:10px;color:#666;font-size:13px">Página ${j.pagina} de ${tp}</span>`;
+    pagDiv.innerHTML = pg;
+  } else { pagDiv.innerHTML = ''; }
+}
+
+async function mcCrearInvestigacion() {
+  const j = mcData;
+  if (!j) return;
+  if (!confirm(`¿Crear investigación con las ${j.total.toLocaleString('es-CO')} mesas en cero de "${j.nomcandidato}"?`)) return;
+  const btn = document.getElementById('mc-btn-crear');
+  btn.disabled = true; btn.textContent = '⏳ Cargando todas las mesas...';
+  try {
+    // Traer todas las páginas
+    const todas = [];
+    const tp = j.paginas;
+    for (let p = 1; p <= tp; p++) {
+      const body = {
+        codcandidato: j.codcandidato,
+        fuente: j.fuente,
+        coddepto: document.getElementById('mc-depto').value || null,
+        codmipio: document.getElementById('mc-mpio').value || null,
+        numdia: document.getElementById('mc-dia').value || null,
+        pagina: p, por_pagina: 2000
+      };
+      const r = await fetch(BASE_PATH + '/api/investigaciones-pres/mesas-cero', {
+        method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)
+      });
+      const rj = await r.json();
+      if (rj.success) todas.push(...rj.filas);
+    }
+    btn.textContent = `⏳ Creando ${todas.length}...`;
+    const res = await fetch(BASE_PATH + '/api/investigaciones-pres/crear-mesas-cero', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        mesas: todas,
+        codcandidato: j.codcandidato,
+        nomcandidato: j.nomcandidato,
+        codpartido: j._codpartido,
+        nompartido: j.nompartido,
+        numdia: j.numdia
+      })
+    });
+    const jres = await res.json();
+    if (jres.success) {
+      alert(`✅ Investigación creada: ${jres.creadas} mesas nuevas (de ${jres.total} encontradas).`);
+      invCargarListado();
+    } else {
+      alert('Error: ' + jres.error);
+    }
+  } catch(e) {
+    alert('Error: ' + e.message);
+  } finally {
+    btn.disabled = false; btn.textContent = '✅ Crear Investigación';
+  }
 }
 
 async function invOnDeptoChange() {
