@@ -674,6 +674,11 @@
             Cargue del archivo Excel <code>CONFORMACION_COMISIONES_*.xlsx</code> publicado por la Registraduría.
           </p>
 
+          <!-- Estado E24 -->
+          <div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:0.88em">
+            <strong>📄 Visor E24 PRES:</strong> <span id="com-e24-info">Cargando...</span>
+          </div>
+
           <!-- Cargue de Excel -->
           <div style="background:#f8fafc;border:2px solid #e2e8f0;border-radius:10px;padding:14px;margin-bottom:16px">
             <h3 style="margin:0 0 10px;font-size:1em;color:#1e3a8a">📂 Importar archivo Excel</h3>
@@ -2972,12 +2977,50 @@ async function escEliminarUno(nombre, facceso) {
 // ===================== MÓDULO COMISIONES ESCRUTINIO =====================
 let comInit_done = false;
 let comPagina = 1;
+let comE24Map = {};
+let comE24Info = { ruta: '', existe: false };
 
 async function comInit() {
   if (comInit_done) return;
   comInit_done = true;
-  await comRecargarResumen();
-  await comCargarFiltros();
+  await Promise.all([comRecargarResumen(), comCargarFiltros(), comCargarE24Disponibles()]);
+}
+
+async function comCargarE24Disponibles() {
+  const r = await fetchJSON('/api/comisiones-pres/e24-disponibles');
+  if (r.data.success) {
+    comE24Map = r.data.data || {};
+    comE24Info = { ruta: r.data.ruta || '', existe: !!r.data.existe_ruta };
+    const tot = r.data.total || 0;
+    // Mostrar info en el panel de E24
+    const elInfo = document.getElementById('com-e24-info');
+    if (elInfo) {
+      if (!comE24Info.existe) {
+        elInfo.innerHTML = `⚠️ Ruta del repositorio E24 PRES <b>aún no existe</b> en el servidor (<code>${comE24Info.ruta}</code>). Pendiente de configurar.`;
+        elInfo.style.color = '#9a3412';
+      } else if (tot === 0) {
+        elInfo.innerHTML = `📁 Repositorio configurado: <code>${comE24Info.ruta}</code> — Sin PDFs aún. <span style="color:#888">Patrón esperado: <code>E24_PRES_&lt;depto&gt;_&lt;mpio&gt;_..._&lt;codcomision&gt;.pdf</code></span>`;
+        elInfo.style.color = '#475569';
+      } else {
+        elInfo.innerHTML = `✅ ${tot.toLocaleString('es-CO')} PDFs E24 disponibles en <code>${comE24Info.ruta}</code>`;
+        elInfo.style.color = '#166534';
+      }
+    }
+  }
+}
+
+function comE24Link(coddepto, codmpio, comAuxiliar, comMunicipal, comDpto) {
+  // Buscar primero por comisión auxiliar, luego municipal, luego departamental
+  const candidatos = [comAuxiliar, comMunicipal, comDpto].filter(c => c != null);
+  for (const cod of candidatos) {
+    const key = `${(coddepto||'').padStart(2,'0')}_${(codmpio||'').padStart(3,'0')}_${cod}`;
+    if (comE24Map[key]) {
+      const f = comE24Map[key];
+      return `<a href="${BASE_PATH}/api/comisiones-pres/e24/${encodeURIComponent(f)}" target="_blank"
+                 style="background:#1e3a8a;color:#fff;padding:3px 10px;border-radius:5px;text-decoration:none;font-size:0.85em;font-weight:600">📄 PRES</a>`;
+    }
+  }
+  return '<span style="color:#cbd5e1">—</span>';
 }
 
 async function comRecargarResumen() {
@@ -3108,12 +3151,14 @@ async function comConsultar(p) {
     if (!j.data.length) { document.getElementById('com-content').innerHTML='<p style="color:#666">Sin resultados.</p>'; return; }
     let html = '<table style="font-size:12px"><thead><tr style="background:#1e3a8a;color:#fff">'
       + '<th>#</th><th>Depto</th><th>Mpio</th><th>Zona</th><th>Puesto</th><th>Tipo</th>'
-      + '<th>Comisión</th><th class="number">Mesa Inicial</th><th class="number">Mesa Final</th>'
+      + '<th>Comisión</th><th>E24</th>'
+      + '<th class="number">Mesa Inicial</th><th class="number">Mesa Final</th>'
       + '<th class="number">Total Mesas</th><th>Lugar Escrutinio</th></tr></thead><tbody>';
     j.data.forEach((c, i) => {
       const n = (j.pagina-1)*j.por_pagina + i + 1;
       const tipoBg = {'GENERAL':'#dbeafe','DEPARTAMENTAL':'#fef3c7','MUNICIPAL':'#dcfce7','ZONAL':'#e0e7ff','AUXILIAR':'#f3e8ff'}[c.tipo_comision] || '#f1f5f9';
       const tipoColor = {'GENERAL':'#1e3a8a','DEPARTAMENTAL':'#92400e','MUNICIPAL':'#166534','ZONAL':'#3730a3','AUXILIAR':'#6b21a8'}[c.tipo_comision] || '#475569';
+      const e24 = comE24Link(c.coddepto, c.codmpio, c.comision_auxiliar, c.comision_municipal, c.comision_dptal);
       html += `<tr style="background:${i%2?'#f8fafc':'#fff'}">
         <td>${n}</td>
         <td>${c.coddepto||''} ${(c.nomdepto||'').substring(0,15)}</td>
@@ -3122,6 +3167,7 @@ async function comConsultar(p) {
         <td style="font-size:0.9em">${c.codpuesto||''}${c.nompuesto? ' - '+c.nompuesto.substring(0,22):''}</td>
         <td><span style="background:${tipoBg};color:${tipoColor};padding:2px 8px;border-radius:8px;font-size:0.78em;font-weight:600">${c.tipo_comision||'—'}</span></td>
         <td>${c.nombre_comision||''}</td>
+        <td style="text-align:center">${e24}</td>
         <td class="number">${(c.mesa_inicial||0).toLocaleString('es-CO')}</td>
         <td class="number">${(c.mesa_final||0).toLocaleString('es-CO')}</td>
         <td class="number"><b>${(c.total_mesas||0).toLocaleString('es-CO')}</b></td>

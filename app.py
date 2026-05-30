@@ -413,6 +413,9 @@ UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'upload
 PROCESADO_FOLDER = os.path.join(UPLOAD_FOLDER, 'PROCESADO')
 os.makedirs(PROCESADO_FOLDER, exist_ok=True)
 
+# Ruta del repositorio de PDFs E24 Presidencial (formulario por comisión escrutadora)
+E24_PRES_BASE_PATH = os.environ.get('E24_PRES_BASE_PATH', '/opt/softwareEscrutinios/E24_PRES')
+
 import re as _re
 def _extraer_depto(nombre_archivo, primera_linea=''):
     """Extrae código de depto del nombre (patrón _<dd>_) o de la primera línea (primeros 2 chars)."""
@@ -1928,6 +1931,48 @@ def com_pres_consultar():
     except Exception as e:
         logger.exception('[comisiones-pres/consultar]')
         return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/comisiones-pres/e24-disponibles', methods=['GET'])
+def com_pres_e24_disponibles():
+    """Lista códigos de comisión que tienen E24 PRES disponible.
+    Formato esperado: E24_PRES_<DEPTO>_<MPIO>_..._<COD_COMISION>.pdf
+    """
+    err = _require_session()
+    if err: return err
+    try:
+        import re as _re_e
+        disp = {}
+        if os.path.isdir(E24_PRES_BASE_PATH):
+            for f in os.listdir(E24_PRES_BASE_PATH):
+                if not (f.lower().endswith('.pdf') and f.startswith('E24_')):
+                    continue
+                m = _re_e.match(r'E24_(PRES|PRE)_(\d+)_(\d+)_.*_(\d+)\.pdf$', f, _re_e.I)
+                if m:
+                    cd = m.group(2); cm = m.group(3); ccom = m.group(4)
+                    key = f'{cd}_{cm}_{ccom}'
+                    disp[key] = f
+        return jsonify({'success': True, 'data': disp, 'total': len(disp),
+                        'ruta': E24_PRES_BASE_PATH,
+                        'existe_ruta': os.path.isdir(E24_PRES_BASE_PATH)})
+    except Exception as e:
+        logger.exception('[com-pres/e24-disp]')
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/comisiones-pres/e24/<filename>')
+def com_pres_e24_pdf(filename):
+    """Sirve un PDF E24 PRES desde el repositorio configurado."""
+    err = _require_session()
+    if err: return err
+    import re as _re_e
+    if not _re_e.match(r'^E24_[A-Za-z0-9_]+\.pdf$', filename):
+        return jsonify({'success': False, 'error': 'Nombre de archivo inválido'}), 400
+    ruta = os.path.normpath(os.path.join(E24_PRES_BASE_PATH, filename))
+    if not ruta.startswith(os.path.normpath(E24_PRES_BASE_PATH)):
+        return jsonify({'success': False, 'error': 'Ruta inválida'}), 400
+    if not os.path.isfile(ruta):
+        return jsonify({'success': False, 'error': 'Archivo no encontrado'}), 404
+    from flask import send_file
+    return send_file(ruta, mimetype='application/pdf')
 
 @app.route('/api/comisiones-pres/vaciar', methods=['POST'])
 def com_pres_vaciar():
