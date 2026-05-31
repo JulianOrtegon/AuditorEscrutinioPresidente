@@ -190,9 +190,15 @@
                        justify-content:flex-end; padding-right:6px; color:#fff; font-size:.75em; font-weight:bold; }
           .dash-bar .val { flex:0 0 90px; text-align:right; color:#111827; font-weight:600; font-family:monospace; }
 
-          .dash-cand { display:grid; grid-template-columns:30px 1fr 90px; gap:10px; align-items:center; padding:8px 0;
+          .dash-cand { display:grid; grid-template-columns:30px 76px 1fr 90px; gap:12px; align-items:center; padding:10px 0;
                        border-bottom:1px solid #f3f4f6; }
           .dash-cand .rank { font-weight:bold; color:#9ca3af; text-align:center; }
+          .dash-cand .foto { width:76px; height:76px; border-radius:50%; background:#e5e7eb;
+                       object-fit:cover; object-position:center 30%;
+                       box-shadow:0 2px 8px rgba(0,0,0,0.18); border:3px solid #fff;
+                       outline:2px solid #e5e7eb; }
+          .dash-cand .foto-placeholder { width:76px; height:76px; border-radius:50%; background:#e5e7eb;
+                       display:flex; align-items:center; justify-content:center; color:#9ca3af; font-size:2em; }
           .dash-cand .info b { color:#1f2937; }
           .dash-cand .info small { display:block; color:#6b7280; }
           .dash-cand .votos { text-align:right; font-weight:bold; color:#1e40af; font-family:monospace; font-size:1.05em; }
@@ -256,6 +262,10 @@
           <div class="dash-section">
             <h3>🏆 Top candidatos <span class="pill" id="dash-fuente">—</span></h3>
             <div id="dash-top-cand"></div>
+          </div>
+          <div class="dash-section">
+            <h3>🏆 Top candidatos <span class="pill" style="background:#dcfce7;color:#166534">Preconteo</span></h3>
+            <div id="dash-top-cand-prec"></div>
           </div>
           <div class="dash-section">
             <h3>📎 Evidencias por tipo</h3>
@@ -3566,18 +3576,26 @@ function dashboardRender(d) {
     });
   }, 50);
 
-  // Top candidatos
+  // Top candidatos (fuente principal: escrutinio si hay, si no preconteo)
   document.getElementById('dash-fuente').textContent = d.fuente_top || '';
-  const tot = (d.top_candidatos || []).reduce((s,x) => s + (Number(x.votos)||0), 0) || 1;
-  document.getElementById('dash-top-cand').innerHTML = (d.top_candidatos || []).slice(0,10).map((c,i) => {
-    const v = Number(c.votos) || 0;
-    const pct = (v / tot * 100).toFixed(1);
-    return `<div class="dash-cand">
-      <div class="rank">${i===0?'🥇':i===1?'🥈':i===2?'🥉':(i+1)}</div>
-      <div class="info"><b>${c.nomcandidato || ('Cod ' + c.codcandidato)}</b><small>${c.nompartido || ''} · ${pct}%</small></div>
-      <div class="votos">${v.toLocaleString('es-CO')}</div>
-    </div>`;
-  }).join('') || '<p style="color:#999;font-style:italic">Sin datos</p>';
+  const renderTopCand = (lista, elId) => {
+    const tot = (lista || []).reduce((s,x) => s + (Number(x.votos)||0), 0) || 1;
+    document.getElementById(elId).innerHTML = (lista || []).slice(0,10).map((c,i) => {
+      const v = Number(c.votos) || 0;
+      const pct = (v / tot * 100).toFixed(1);
+      const foto = c.foto_url
+        ? `<img class="foto" src="${c.foto_url}" alt="${c.nomcandidato||''}" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'foto-placeholder',textContent:'👤'}))"/>`
+        : `<div class="foto-placeholder">👤</div>`;
+      return `<div class="dash-cand">
+        <div class="rank">${i===0?'🥇':i===1?'🥈':i===2?'🥉':(i+1)}</div>
+        ${foto}
+        <div class="info"><b>${c.nomcandidato || ('Cod ' + c.codcandidato)}</b><small>${c.nompartido || ''} · ${pct}%</small></div>
+        <div class="votos">${v.toLocaleString('es-CO')}</div>
+      </div>`;
+    }).join('') || '<p style="color:#999;font-style:italic">Sin datos</p>';
+  };
+  renderTopCand(d.top_candidatos, 'dash-top-cand');
+  renderTopCand(d.top_candidatos_preconteo, 'dash-top-cand-prec');
 
   // Evidencias por tipo
   const ev = d.evidencias;

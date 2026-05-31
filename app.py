@@ -3721,6 +3721,34 @@ def dashboard_metricas():
                     out['top_candidatos'] = cur.fetchall()
                     out['fuente_top'] = 'Preconteo'
 
+                # ---- Top candidatos SIEMPRE por preconteo (separado) ----
+                cur.execute("""
+                    SELECT p.codcandidato,
+                           (SELECT nomcandidato FROM candidatos_presidencial_2026 WHERE codcandidato=p.codcandidato LIMIT 1) AS nomcandidato,
+                           (SELECT nompartido FROM partidos_presidencial_2026 WHERE codpartido=p.codpartido LIMIT 1) AS nompartido,
+                           SUM(p.votos) AS votos
+                    FROM preconteo_presidencial_2026 p
+                    WHERE p.codcandidato NOT IN (996,997,998)
+                    GROUP BY p.codcandidato, p.codpartido
+                    ORDER BY votos DESC NULLS LAST LIMIT 15
+                """)
+                out['top_candidatos_preconteo'] = cur.fetchall()
+
+                # Anexar URL de foto si existe
+                _foto_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                         'public', 'static', 'candidatos')
+                def _foto_url(cod):
+                    if not cod:
+                        return None
+                    for ext in ('png', 'jpg', 'jpeg'):
+                        if os.path.isfile(os.path.join(_foto_dir, f'{cod}.{ext}')):
+                            return f'/static/candidatos/{cod}.{ext}'
+                    return None
+                for c in out['top_candidatos']:
+                    c['foto_url'] = _foto_url(c.get('codcandidato'))
+                for c in out['top_candidatos_preconteo']:
+                    c['foto_url'] = _foto_url(c.get('codcandidato'))
+
                 # ---- Votos especiales totales (último día) ----
                 if ultimo > 0:
                     cur.execute(f"""SELECT
