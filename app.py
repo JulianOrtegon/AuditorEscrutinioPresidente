@@ -3801,11 +3801,23 @@ def admin_usuario_eliminar(uid):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 # ==================== DASHBOARD MÉTRICAS ====================
+import threading as _th_metricas
+_METRICAS_CACHE = {'payload': None, 'ts': 0.0}
+_METRICAS_LOCK = _th_metricas.Lock()
+_METRICAS_TTL = 8  # seg: recalcula a lo sumo cada 8s; el resto sirve cache (desacopla #usuarios de la BD)
+
 @app.route('/api/dashboard/metricas', methods=['GET'])
 def dashboard_metricas():
     """Métricas globales para el dashboard: mesas, cobertura, evidencias, AGE, comisiones, top deptos y candidatos."""
     err = _require_session()
     if err: return err
+    import time as _tt
+    if _METRICAS_CACHE['payload'] is not None and (_tt.time() - _METRICAS_CACHE['ts']) < _METRICAS_TTL:
+        return jsonify(_METRICAS_CACHE['payload'])
+    _got_lock = _METRICAS_LOCK.acquire(timeout=20)
+    if _got_lock and _METRICAS_CACHE['payload'] is not None and (_tt.time() - _METRICAS_CACHE['ts']) < _METRICAS_TTL:
+        _METRICAS_LOCK.release()
+        return jsonify(_METRICAS_CACHE['payload'])
     try:
         ultimo = _ultimo_dia_seguimiento()
         expr = _build_ultimo_valor_expr(ultimo) if ultimo > 0 else '0'
@@ -4040,10 +4052,18 @@ def dashboard_metricas():
         out['cobertura_e14'] = round(out['e14']['mesas'] * 100.0 / tm, 2)
         out['cobertura_age'] = round(out['age']['mesas'] * 100.0 / tm, 2)
 
-        return jsonify({'success': True, 'data': out, 'ts': int(_time_mod.time())})
+        payload = {'success': True, 'data': out, 'ts': int(_time_mod.time())}
+        _METRICAS_CACHE['payload'] = payload
+        _METRICAS_CACHE['ts'] = _tt.time()
+        return jsonify(payload)
     except Exception as e:
         logger.exception('[dashboard/metricas]')
+        if _METRICAS_CACHE['payload'] is not None:
+            return jsonify(_METRICAS_CACHE['payload'])
         return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        if _got_lock:
+            _METRICAS_LOCK.release()
 
 
 # ==================== MAIN ====================
