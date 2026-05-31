@@ -3911,8 +3911,11 @@ function dashboardRender(d) {
 
   // Top candidatos (fuente principal: escrutinio si hay, si no preconteo)
   document.getElementById('dash-fuente').textContent = d.fuente_top || '';
-  const renderTopCand = (lista, elId) => {
-    const tot = (lista || []).reduce((s,x) => s + (Number(x.votos)||0), 0) || 1;
+  const renderTopCand = (lista, elId, esp) => {
+    esp = esp || {};
+    // Base del % = total votos: candidatos + blanco + nulo + no marcado.
+    const tot = ((lista || []).reduce((s,x) => s + (Number(x.votos)||0), 0)
+                 + (Number(esp.blanco)||0) + (Number(esp.nulo)||0) + (Number(esp.no_marcado)||0)) || 1;
     document.getElementById(elId).innerHTML = (lista || []).slice(0,10).map((c,i) => {
       const v = Number(c.votos) || 0;
       const pct = (v / tot * 100).toFixed(1);
@@ -3927,8 +3930,8 @@ function dashboardRender(d) {
       </div>`;
     }).join('') || '<p style="color:#999;font-style:italic">Sin datos</p>';
   };
-  renderTopCand(d.top_candidatos, 'dash-top-cand');
-  renderTopCand(d.top_candidatos_preconteo, 'dash-top-cand-prec');
+  renderTopCand(d.top_candidatos, 'dash-top-cand', d.especiales);
+  renderTopCand(d.top_candidatos_preconteo, 'dash-top-cand-prec', d.especiales_preconteo);
 
   // Evidencias por tipo
   const ev = d.evidencias;
