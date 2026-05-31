@@ -3574,6 +3574,232 @@ def _gen_arrancar_si_activo():
 
 _gen_arrancar_si_activo()
 
+# ==================== ADMINISTRACIÓN: USUARIOS Y PERFILES ====================
+
+@app.route('/api/admin/perfiles', methods=['GET'])
+def admin_perfiles_listar():
+    if not _is_admin():
+        return jsonify({'success': False, 'error': 'Solo admin'}), 403
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""SELECT p.id, p.nombre,
+                                      (SELECT COUNT(*) FROM usuarios u WHERE u.id_perfil=p.id) AS usuarios
+                               FROM perfiles p ORDER BY p.id""")
+                return jsonify({'success': True, 'data': cur.fetchall()})
+    except Exception as e:
+        logger.exception('[admin/perfiles]')
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/admin/perfiles', methods=['POST'])
+def admin_perfil_crear():
+    if not _is_admin():
+        return jsonify({'success': False, 'error': 'Solo admin'}), 403
+    d = request.get_json(silent=True) or {}
+    nombre = (d.get('nombre') or '').strip()
+    if not nombre:
+        return jsonify({'success': False, 'error': 'Nombre requerido'}), 400
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("INSERT INTO perfiles(nombre) VALUES (%s) RETURNING id", (nombre,))
+                pid = cur.fetchone()['id']
+                conn.commit()
+        return jsonify({'success': True, 'data': {'id': pid, 'nombre': nombre}})
+    except Exception as e:
+        if 'duplicate' in str(e).lower() or 'unique' in str(e).lower():
+            return jsonify({'success': False, 'error': 'Ya existe un perfil con ese nombre'}), 400
+        logger.exception('[admin/perfil/crear]')
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/admin/perfiles/<int:pid>', methods=['PUT'])
+def admin_perfil_editar(pid):
+    if not _is_admin():
+        return jsonify({'success': False, 'error': 'Solo admin'}), 403
+    d = request.get_json(silent=True) or {}
+    nombre = (d.get('nombre') or '').strip()
+    if not nombre:
+        return jsonify({'success': False, 'error': 'Nombre requerido'}), 400
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("UPDATE perfiles SET nombre=%s WHERE id=%s", (nombre, pid))
+                if cur.rowcount == 0:
+                    return jsonify({'success': False, 'error': 'Perfil no encontrado'}), 404
+                conn.commit()
+        return jsonify({'success': True})
+    except Exception as e:
+        if 'duplicate' in str(e).lower():
+            return jsonify({'success': False, 'error': 'Ya existe un perfil con ese nombre'}), 400
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/admin/perfiles/<int:pid>', methods=['DELETE'])
+def admin_perfil_eliminar(pid):
+    if not _is_admin():
+        return jsonify({'success': False, 'error': 'Solo admin'}), 403
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT COUNT(*) AS n FROM usuarios WHERE id_perfil=%s", (pid,))
+                n = cur.fetchone()['n']
+                if n > 0:
+                    return jsonify({'success': False, 'error': f'No se puede eliminar: {n} usuario(s) asignado(s)'}), 400
+                cur.execute("DELETE FROM perfiles WHERE id=%s", (pid,))
+                conn.commit()
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/admin/usuarios', methods=['GET'])
+def admin_usuarios_listar():
+    if not _is_admin():
+        return jsonify({'success': False, 'error': 'Solo admin'}), 403
+    try:
+        q = (request.args.get('q') or '').strip()
+        id_perfil = request.args.get('id_perfil', type=int)
+        page = max(1, request.args.get('page', type=int) or 1)
+        per_page = min(200, request.args.get('per_page', type=int) or 50)
+        where = []
+        params = []
+        if q:
+            where.append("(u.cedula ILIKE %s OR u.nombres ILIKE %s OR u.apellidos ILIKE %s OR u.correo ILIKE %s)")
+            patt = f'%{q}%'
+            params.extend([patt, patt, patt, patt])
+        if id_perfil:
+            where.append("u.id_perfil = %s")
+            params.append(id_perfil)
+        wsql = ('WHERE ' + ' AND '.join(where)) if where else ''
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(f"SELECT COUNT(*) AS n FROM usuarios u {wsql}", params)
+                total = cur.fetchone()['n']
+                cur.execute(f"""
+                    SELECT u.id, u.cedula, u.nombres, u.apellidos, u.correo,
+                           u.id_perfil, p.nombre AS perfil, u.creado
+                    FROM usuarios u
+                    LEFT JOIN perfiles p ON p.id = u.id_perfil
+                    {wsql}
+                    ORDER BY u.id DESC
+                    LIMIT %s OFFSET %s
+                """, params + [per_page, (page - 1) * per_page])
+                rows = cur.fetchall()
+        return jsonify({'success': True, 'data': rows,
+                        'total': total, 'page': page, 'per_page': per_page})
+    except Exception as e:
+        logger.exception('[admin/usuarios]')
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/admin/usuarios', methods=['POST'])
+def admin_usuario_crear():
+    if not _is_admin():
+        return jsonify({'success': False, 'error': 'Solo admin'}), 403
+    d = request.get_json(silent=True) or {}
+    cedula = (d.get('cedula') or '').strip()
+    contrasena = d.get('contrasena') or ''
+    if not cedula or not contrasena:
+        return jsonify({'success': False, 'error': 'Cédula y contraseña requeridas'}), 400
+    if len(contrasena) < 4:
+        return jsonify({'success': False, 'error': 'Contraseña mínimo 4 caracteres'}), 400
+    id_perfil = d.get('id_perfil')
+    if not id_perfil:
+        return jsonify({'success': False, 'error': 'Perfil requerido'}), 400
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""INSERT INTO usuarios(cedula, contrasena, nombres, apellidos, correo, id_perfil)
+                               VALUES (%s,%s,%s,%s,%s,%s) RETURNING id""",
+                            (cedula, hash_password(contrasena),
+                             (d.get('nombres') or '').strip(),
+                             (d.get('apellidos') or '').strip(),
+                             (d.get('correo') or '').strip() or None,
+                             int(id_perfil)))
+                uid = cur.fetchone()['id']
+                conn.commit()
+        return jsonify({'success': True, 'data': {'id': uid}})
+    except Exception as e:
+        if 'duplicate' in str(e).lower() or 'unique' in str(e).lower():
+            return jsonify({'success': False, 'error': 'Ya existe un usuario con esa cédula'}), 400
+        logger.exception('[admin/usuario/crear]')
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/admin/usuarios/<int:uid>', methods=['PUT'])
+def admin_usuario_editar(uid):
+    if not _is_admin():
+        return jsonify({'success': False, 'error': 'Solo admin'}), 403
+    d = request.get_json(silent=True) or {}
+    campos, params = [], []
+    for k in ('cedula', 'nombres', 'apellidos', 'correo'):
+        if k in d:
+            v = (d.get(k) or '').strip()
+            campos.append(f'{k} = %s'); params.append(v or None)
+    if 'id_perfil' in d and d['id_perfil']:
+        # No permitir bajar de admin al propio usuario
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT id_perfil FROM usuarios WHERE id=%s", (uid,))
+                row = cur.fetchone()
+                if row and row['id_perfil'] == 1 and int(d['id_perfil']) != 1 and uid == session.get('user_id'):
+                    return jsonify({'success': False, 'error': 'No puedes cambiar tu propio rol de admin'}), 400
+        campos.append('id_perfil = %s'); params.append(int(d['id_perfil']))
+    if not campos:
+        return jsonify({'success': False, 'error': 'Nada que actualizar'}), 400
+    params.append(uid)
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(f"UPDATE usuarios SET {', '.join(campos)} WHERE id=%s", params)
+                if cur.rowcount == 0:
+                    return jsonify({'success': False, 'error': 'Usuario no encontrado'}), 404
+                conn.commit()
+        return jsonify({'success': True})
+    except Exception as e:
+        if 'duplicate' in str(e).lower():
+            return jsonify({'success': False, 'error': 'Cédula duplicada'}), 400
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/admin/usuarios/<int:uid>/password', methods=['POST'])
+def admin_usuario_reset_pwd(uid):
+    if not _is_admin():
+        return jsonify({'success': False, 'error': 'Solo admin'}), 403
+    d = request.get_json(silent=True) or {}
+    pwd = d.get('contrasena') or ''
+    if len(pwd) < 4:
+        return jsonify({'success': False, 'error': 'Contraseña mínimo 4 caracteres'}), 400
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""UPDATE usuarios SET contrasena=%s, session_token=NULL
+                               WHERE id=%s""", (hash_password(pwd), uid))
+                if cur.rowcount == 0:
+                    return jsonify({'success': False, 'error': 'Usuario no encontrado'}), 404
+                conn.commit()
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/admin/usuarios/<int:uid>', methods=['DELETE'])
+def admin_usuario_eliminar(uid):
+    if not _is_admin():
+        return jsonify({'success': False, 'error': 'Solo admin'}), 403
+    if uid == session.get('user_id'):
+        return jsonify({'success': False, 'error': 'No puedes eliminar tu propio usuario'}), 400
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT id_perfil FROM usuarios WHERE id=%s", (uid,))
+                row = cur.fetchone()
+                if not row:
+                    return jsonify({'success': False, 'error': 'Usuario no encontrado'}), 404
+                if row['id_perfil'] == 1:
+                    cur.execute("SELECT COUNT(*) AS n FROM usuarios WHERE id_perfil=1")
+                    if cur.fetchone()['n'] <= 1:
+                        return jsonify({'success': False, 'error': 'No puedes eliminar al último administrador'}), 400
+                cur.execute("DELETE FROM usuarios WHERE id=%s", (uid,))
+                conn.commit()
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 # ==================== DASHBOARD MÉTRICAS ====================
 @app.route('/api/dashboard/metricas', methods=['GET'])
 def dashboard_metricas():

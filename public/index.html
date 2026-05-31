@@ -32,15 +32,31 @@
   .topbar .logout-btn{background:#dc3545;color:#fff;border:none;padding:6px 14px;border-radius:5px;
     cursor:pointer;font-size:13px;font-weight:600}
   .topbar .logout-btn:hover{background:#c82333}
-  .layout{display:flex;min-height:calc(100vh - 50px)}
-  .sidebar{width:240px;background:#1f2937;color:#cbd5e1;padding:16px 0;overflow-y:auto}
+  .layout{display:flex;min-height:calc(100vh - 50px);position:relative}
+  .sidebar{width:240px;background:#1f2937;color:#cbd5e1;padding:16px 0;overflow-y:auto;
+    transition:width .25s ease, transform .25s ease; flex-shrink:0}
   .sidebar .group-title{padding:10px 18px 6px;font-size:11px;color:#64748b;text-transform:uppercase;
-    letter-spacing:0.5px;font-weight:700}
+    letter-spacing:0.5px;font-weight:700;white-space:nowrap;overflow:hidden}
   .sidebar a{display:block;padding:9px 18px;color:#cbd5e1;text-decoration:none;font-size:13.5px;
-    border-left:3px solid transparent;transition:all 0.15s}
+    border-left:3px solid transparent;transition:all 0.15s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .sidebar a:hover{background:#374151;color:#fff;border-left-color:#3b82f6}
   .sidebar a.active{background:#374151;color:#fff;border-left-color:#3b82f6}
-  .content{flex:1;padding:22px 28px;overflow-x:auto}
+  /* Estado: colapsado (escritorio) — sidebar oculto */
+  body.sidebar-collapsed .sidebar{width:0;padding:0;overflow:hidden;border:none}
+  /* Botón hamburguesa */
+  .hamburger{background:transparent;border:none;color:#fff;font-size:22px;cursor:pointer;
+    padding:0 10px;display:flex;align-items:center;border-radius:5px;transition:background .15s}
+  .hamburger:hover{background:rgba(255,255,255,0.15)}
+  .content{flex:1;padding:22px 28px;overflow-x:auto;min-width:0}
+  /* Modo móvil: sidebar como overlay */
+  @media (max-width: 768px){
+    .sidebar{position:fixed;top:50px;left:0;height:calc(100vh - 50px);z-index:900;
+      box-shadow:2px 0 12px rgba(0,0,0,0.25)}
+    body.sidebar-collapsed .sidebar{transform:translateX(-100%);width:240px;padding:16px 0}
+    .sidebar-backdrop{display:none;position:fixed;top:50px;left:0;right:0;bottom:0;
+      background:rgba(0,0,0,0.4);z-index:899}
+    body:not(.sidebar-collapsed) .sidebar-backdrop{display:block}
+  }
   .module{display:none}
   .module.active{display:block}
   .card{background:#fff;border-radius:10px;padding:22px;margin-bottom:18px;box-shadow:0 1px 4px rgba(0,0,0,0.06)}
@@ -84,13 +100,17 @@
 <!-- ====================== APP ====================== -->
 <div id="app">
   <div class="topbar">
-    <h1>🗳️ Auditor Escrutinio Presidencial 2026</h1>
+    <div style="display:flex;align-items:center;gap:8px">
+      <button class="hamburger" onclick="toggleSidebar()" title="Ocultar / mostrar menú" aria-label="Toggle menú">☰</button>
+      <h1>🗳️ Auditor Escrutinio Presidencial 2026</h1>
+    </div>
     <div class="user-info">
       <span id="user-display"></span>
       <button class="logout-btn" onclick="doLogout()">Cerrar Sesión</button>
     </div>
   </div>
   <div class="layout">
+    <div class="sidebar-backdrop" onclick="toggleSidebar()"></div>
     <nav class="sidebar">
       <div class="group-title">Inicio</div>
       <a href="#" onclick="cambiarModulo('mod-home', this); return false;" class="active">🏠 Tablero</a>
@@ -115,6 +135,9 @@
       <a href="#" onclick="cambiarModulo('mod-evidencias', this); evCargar(); return false;">📎 Evidencias <span class="badge" style="background:#dcfce7;color:#166534">listo</span></a>
       <a href="#" onclick="cambiarModulo('mod-age', this); ageInit(); return false;">📋 Observaciones AGE <span class="badge" style="background:#dcfce7;color:#166534">listo</span></a>
       <a href="#" onclick="cambiarModulo('mod-comisiones', this); comInit(); return false;">🏛️ Comisiones Escrutinio <span class="badge" style="background:#dcfce7;color:#166534">listo</span></a>
+
+      <div class="group-title" id="grp-admin" style="display:none">Administración</div>
+      <a href="#" id="link-admin" style="display:none" onclick="cambiarModulo('mod-admin', this); adminInit(); return false;">👥 Usuarios y Perfiles <span class="badge" style="background:linear-gradient(135deg,#dc2626,#7c2d12);color:#fff">ADMIN</span></a>
     </nav>
 
     <main class="content">
@@ -286,6 +309,98 @@
         <div class="dash-section">
           <h3>🗺️ Avance escrutinio por departamento</h3>
           <div id="dash-deptos"></div>
+        </div>
+      </div>
+
+      <!-- ============== ADMINISTRACIÓN USUARIOS Y PERFILES ============== -->
+      <div id="mod-admin" class="module">
+        <style>
+          .adm-hero { background:linear-gradient(135deg,#7c2d12,#dc2626,#f59e0b);
+                      color:#fff; padding:18px 22px; border-radius:14px; margin-bottom:16px;
+                      box-shadow:0 6px 20px rgba(220,38,38,0.25); }
+          .adm-hero h2 { margin:0 0 4px; color:#fff; }
+          .adm-tabs { display:flex; gap:6px; border-bottom:2px solid #e5e7eb; margin-bottom:14px; }
+          .adm-tabs button { background:none; border:none; padding:10px 18px; cursor:pointer;
+                       font-size:14px; font-weight:600; color:#6b7280; border-bottom:3px solid transparent;
+                       margin-bottom:-2px; transition:all .15s; }
+          .adm-tabs button.active { color:#dc2626; border-bottom-color:#dc2626; }
+          .adm-tabs button:hover:not(.active) { color:#111827; }
+          .adm-tab-content { display:none; }
+          .adm-tab-content.active { display:block; }
+          .adm-form { background:#f9fafb; padding:14px; border-radius:10px; margin-bottom:14px; }
+          .adm-form .row { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:10px; }
+          .adm-form label { display:block; font-size:12px; font-weight:600; color:#374151; margin-bottom:4px; }
+          .adm-form input, .adm-form select { width:100%; padding:7px 9px; border:1px solid #d1d5db;
+                       border-radius:5px; font-size:13.5px; box-sizing:border-box; }
+          .adm-actions { margin-top:10px; display:flex; gap:8px; }
+          .adm-tabla { width:100%; border-collapse:collapse; font-size:13px; }
+          .adm-tabla th { background:#1e3a8a; color:#fff; padding:7px 9px; text-align:left; font-size:12px; }
+          .adm-tabla td { padding:6px 9px; border-bottom:1px solid #e5e7eb; }
+          .adm-tabla tr:hover { background:#fef3c7; }
+          .adm-pill { display:inline-block; padding:1px 8px; border-radius:8px; background:#dbeafe;
+                       color:#1e3a8a; font-size:11px; font-weight:600; }
+          .adm-btn-mini { padding:3px 8px; border:none; border-radius:4px; cursor:pointer;
+                       font-size:11px; font-weight:600; margin-right:3px; }
+          .adm-btn-mini.edit { background:#3b82f6; color:#fff; }
+          .adm-btn-mini.pwd  { background:#f59e0b; color:#fff; }
+          .adm-btn-mini.del  { background:#dc2626; color:#fff; }
+        </style>
+
+        <div class="adm-hero">
+          <h2>👥 Administración</h2>
+          <div>Gestión de usuarios y perfiles del sistema</div>
+        </div>
+
+        <div class="adm-tabs">
+          <button class="active" onclick="admTab('usuarios')" id="adm-tab-usuarios">👤 Usuarios <span id="adm-cuenta-u" style="background:#fee;color:#dc2626;padding:1px 7px;border-radius:8px;font-size:11px;margin-left:6px"></span></button>
+          <button onclick="admTab('perfiles')" id="adm-tab-perfiles">🛡️ Perfiles <span id="adm-cuenta-p" style="background:#fee;color:#dc2626;padding:1px 7px;border-radius:8px;font-size:11px;margin-left:6px"></span></button>
+        </div>
+
+        <!-- USUARIOS -->
+        <div class="adm-tab-content active" id="adm-pane-usuarios">
+          <div class="adm-form">
+            <h4 style="margin:0 0 10px">Crear / editar usuario</h4>
+            <input type="hidden" id="adm-u-id"/>
+            <div class="row">
+              <div><label>Cédula *</label><input id="adm-u-cedula"/></div>
+              <div><label>Nombres *</label><input id="adm-u-nombres"/></div>
+              <div><label>Apellidos *</label><input id="adm-u-apellidos"/></div>
+              <div><label>Correo</label><input id="adm-u-correo" type="email"/></div>
+              <div><label>Perfil *</label><select id="adm-u-perfil"></select></div>
+              <div><label>Contraseña <span id="adm-u-lbl-pwd">*</span></label><input id="adm-u-password" type="password" placeholder="Mín 4 caracteres"/></div>
+            </div>
+            <div class="adm-actions">
+              <button class="btn" style="background:#16a34a" onclick="admUsuarioGuardar()">💾 Guardar</button>
+              <button class="btn" style="background:#6b7280" onclick="admUsuarioLimpiar()">🆕 Nuevo</button>
+            </div>
+          </div>
+
+          <div style="display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap;align-items:end">
+            <div style="flex:1;min-width:200px"><label style="font-size:12px;font-weight:600">Buscar (cédula/nombre/correo)</label>
+              <input id="adm-u-buscar" oninput="admUsuariosBuscarLazy()" placeholder="..." style="width:100%;padding:7px 9px;border:1px solid #d1d5db;border-radius:5px"/>
+            </div>
+            <div style="min-width:200px"><label style="font-size:12px;font-weight:600">Filtrar por perfil</label>
+              <select id="adm-u-filtro-perfil" onchange="admUsuariosCargar()" style="width:100%;padding:7px 9px;border:1px solid #d1d5db;border-radius:5px"><option value="">— Todos —</option></select>
+            </div>
+            <button class="btn" onclick="admUsuariosCargar()">🔄 Refrescar</button>
+          </div>
+          <div id="adm-u-tabla">Cargando...</div>
+          <div id="adm-u-paginacion" style="margin-top:10px;display:flex;gap:6px;align-items:center"></div>
+        </div>
+
+        <!-- PERFILES -->
+        <div class="adm-tab-content" id="adm-pane-perfiles">
+          <div class="adm-form">
+            <h4 style="margin:0 0 10px">Crear / renombrar perfil</h4>
+            <input type="hidden" id="adm-p-id"/>
+            <div style="display:flex;gap:10px;align-items:end;flex-wrap:wrap">
+              <div style="flex:1;min-width:200px"><label style="font-size:12px;font-weight:600">Nombre del perfil</label>
+                <input id="adm-p-nombre" style="width:100%;padding:7px 9px;border:1px solid #d1d5db;border-radius:5px"/></div>
+              <button class="btn" style="background:#16a34a" onclick="admPerfilGuardar()">💾 Guardar</button>
+              <button class="btn" style="background:#6b7280" onclick="admPerfilLimpiar()">🆕 Nuevo</button>
+            </div>
+          </div>
+          <div id="adm-p-tabla">Cargando...</div>
         </div>
       </div>
 
@@ -1190,7 +1305,28 @@ function cambiarModulo(modId, linkEl) {
   document.getElementById(modId).classList.add('active');
   document.querySelectorAll('.sidebar a').forEach(a => a.classList.remove('active'));
   if (linkEl) linkEl.classList.add('active');
+  // En móvil, ocultar el sidebar tras seleccionar opción
+  if (window.matchMedia('(max-width: 768px)').matches) {
+    document.body.classList.add('sidebar-collapsed');
+    try { localStorage.setItem('sidebarCollapsed', '1'); } catch(_) {}
+  }
 }
+
+function toggleSidebar() {
+  const c = document.body.classList.toggle('sidebar-collapsed');
+  try { localStorage.setItem('sidebarCollapsed', c ? '1' : '0'); } catch(_) {}
+}
+
+(function initSidebarState(){
+  try {
+    const saved = localStorage.getItem('sidebarCollapsed');
+    const isMobile = window.matchMedia('(max-width: 768px)').matches;
+    // En móvil arranca colapsado por defecto; en escritorio respeta lo guardado
+    if (saved === '1' || (saved === null && isMobile)) {
+      document.body.classList.add('sidebar-collapsed');
+    }
+  } catch(_) {}
+})();
 
 // ===================== MÓDULO DIVIPOL (mismo patrón Congreso) =====================
 let divipolInicializado = false;
@@ -3485,6 +3621,192 @@ async function genEjecutarAhora() {
   const d = r.data.data;
   alert(`Corte #${d.num_corte} · ${d.tipo==='generado'?'archivo generado':'sin cambios'} · ${d.mesas_reportadas} mesas`);
   await genRefrescar();
+}
+
+// ===================== MÓDULO ADMINISTRACIÓN =====================
+let admPage = 1;
+let admBuscarTimer = null;
+let admPerfilesCache = [];
+
+async function adminInit() {
+  await Promise.all([admPerfilesCargar(), admUsuariosCargar()]);
+}
+async function admMostrarSiAdmin() {
+  try {
+    const s = await fetchJSON('/api/session');
+    if (s.data?.data?.id_perfil === 1) {
+      document.getElementById('grp-admin').style.display = '';
+      document.getElementById('link-admin').style.display = '';
+    }
+  } catch(_) {}
+}
+document.addEventListener('DOMContentLoaded', () => setTimeout(admMostrarSiAdmin, 200));
+// además, llamar tras login
+const __origDoLogin = typeof doLogin !== 'undefined' ? doLogin : null;
+
+function admTab(tab) {
+  document.querySelectorAll('.adm-tabs button').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.adm-tab-content').forEach(p => p.classList.remove('active'));
+  document.getElementById('adm-tab-' + tab).classList.add('active');
+  document.getElementById('adm-pane-' + tab).classList.add('active');
+}
+
+async function admPerfilesCargar() {
+  try {
+    const r = await fetchJSON('/api/admin/perfiles');
+    if (!r.data.success) { alert('Error: ' + r.data.error); return; }
+    admPerfilesCache = r.data.data;
+    document.getElementById('adm-cuenta-p').textContent = admPerfilesCache.length;
+    // Llenar selects
+    const opts = '<option value="">— Seleccione perfil —</option>' +
+      admPerfilesCache.map(p => `<option value="${p.id}">${p.nombre}</option>`).join('');
+    document.getElementById('adm-u-perfil').innerHTML = opts;
+    document.getElementById('adm-u-filtro-perfil').innerHTML =
+      '<option value="">— Todos —</option>' +
+      admPerfilesCache.map(p => `<option value="${p.id}">${p.nombre}</option>`).join('');
+    // Tabla perfiles
+    document.getElementById('adm-p-tabla').innerHTML = `<table class="adm-tabla">
+      <thead><tr><th style="width:60px">ID</th><th>Nombre</th><th style="width:90px">Usuarios</th><th style="width:160px">Acciones</th></tr></thead>
+      <tbody>${admPerfilesCache.map(p => `<tr>
+        <td>${p.id}</td>
+        <td>${p.nombre}</td>
+        <td>${p.usuarios}</td>
+        <td>
+          <button class="adm-btn-mini edit" onclick="admPerfilEditar(${p.id}, ${JSON.stringify(p.nombre)})">✏️ Renombrar</button>
+          <button class="adm-btn-mini del" onclick="admPerfilEliminar(${p.id}, ${p.usuarios})">🗑️</button>
+        </td></tr>`).join('')}</tbody></table>`;
+  } catch (e) { alert('Error: ' + e.message); }
+}
+
+async function admPerfilGuardar() {
+  const id = document.getElementById('adm-p-id').value;
+  const nombre = document.getElementById('adm-p-nombre').value.trim();
+  if (!nombre) { alert('Nombre requerido'); return; }
+  const url = id ? `/api/admin/perfiles/${id}` : '/api/admin/perfiles';
+  const method = id ? 'PUT' : 'POST';
+  const r = await fetchJSON(url, { method, headers:{'Content-Type':'application/json'}, body: JSON.stringify({nombre}) });
+  if (!r.data.success) { alert('Error: ' + r.data.error); return; }
+  admPerfilLimpiar();
+  await admPerfilesCargar();
+}
+function admPerfilEditar(id, nombre) {
+  document.getElementById('adm-p-id').value = id;
+  document.getElementById('adm-p-nombre').value = nombre;
+}
+function admPerfilLimpiar() {
+  document.getElementById('adm-p-id').value = '';
+  document.getElementById('adm-p-nombre').value = '';
+}
+async function admPerfilEliminar(id, usuarios) {
+  if (usuarios > 0) { alert(`No se puede eliminar: hay ${usuarios} usuario(s) asignado(s)`); return; }
+  if (!confirm('¿Eliminar este perfil?')) return;
+  const r = await fetchJSON(`/api/admin/perfiles/${id}`, { method:'DELETE' });
+  if (!r.data.success) { alert('Error: ' + r.data.error); return; }
+  await admPerfilesCargar();
+}
+
+function admUsuariosBuscarLazy() {
+  clearTimeout(admBuscarTimer);
+  admBuscarTimer = setTimeout(() => { admPage = 1; admUsuariosCargar(); }, 300);
+}
+
+async function admUsuariosCargar() {
+  const q = document.getElementById('adm-u-buscar').value.trim();
+  const fp = document.getElementById('adm-u-filtro-perfil').value;
+  const params = new URLSearchParams();
+  if (q) params.set('q', q);
+  if (fp) params.set('id_perfil', fp);
+  params.set('page', admPage);
+  params.set('per_page', 50);
+  try {
+    const r = await fetchJSON('/api/admin/usuarios?' + params);
+    if (!r.data.success) { alert('Error: ' + r.data.error); return; }
+    const rows = r.data.data || [];
+    document.getElementById('adm-cuenta-u').textContent = r.data.total;
+    document.getElementById('adm-u-tabla').innerHTML = `<table class="adm-tabla">
+      <thead><tr><th>ID</th><th>Cédula</th><th>Nombre</th><th>Correo</th><th>Perfil</th><th>Creado</th><th style="width:200px">Acciones</th></tr></thead>
+      <tbody>${rows.map(u => `<tr>
+        <td>${u.id}</td>
+        <td><b>${u.cedula}</b></td>
+        <td>${(u.nombres||'')} ${(u.apellidos||'')}</td>
+        <td>${u.correo||''}</td>
+        <td><span class="adm-pill">${u.perfil || '—'}</span></td>
+        <td style="font-size:11px;color:#6b7280">${u.creado ? new Date(u.creado).toLocaleDateString('es-CO') : ''}</td>
+        <td>
+          <button class="adm-btn-mini edit" onclick='admUsuarioEditar(${JSON.stringify(u)})'>✏️</button>
+          <button class="adm-btn-mini pwd"  onclick="admUsuarioReset(${u.id}, '${(u.cedula||'').replace(/'/g,'')}')">🔑</button>
+          <button class="adm-btn-mini del"  onclick="admUsuarioEliminar(${u.id}, '${(u.cedula||'').replace(/'/g,'')}')">🗑️</button>
+        </td></tr>`).join('')}</tbody></table>`;
+    // Paginación
+    const total = r.data.total, pp = r.data.per_page;
+    const totPages = Math.max(1, Math.ceil(total / pp));
+    document.getElementById('adm-u-paginacion').innerHTML = `
+      <button class="btn" style="background:#6b7280" ${admPage<=1?'disabled':''} onclick="admPage--;admUsuariosCargar()">◀</button>
+      Página <b>${admPage}</b> de ${totPages} · ${total} usuarios
+      <button class="btn" style="background:#6b7280" ${admPage>=totPages?'disabled':''} onclick="admPage++;admUsuariosCargar()">▶</button>`;
+  } catch (e) { alert('Error: ' + e.message); }
+}
+
+function admUsuarioEditar(u) {
+  document.getElementById('adm-u-id').value = u.id;
+  document.getElementById('adm-u-cedula').value = u.cedula || '';
+  document.getElementById('adm-u-nombres').value = u.nombres || '';
+  document.getElementById('adm-u-apellidos').value = u.apellidos || '';
+  document.getElementById('adm-u-correo').value = u.correo || '';
+  document.getElementById('adm-u-perfil').value = u.id_perfil || '';
+  document.getElementById('adm-u-password').value = '';
+  document.getElementById('adm-u-lbl-pwd').textContent = '(dejar en blanco para no cambiar)';
+  document.querySelector('.adm-form').scrollIntoView({behavior:'smooth'});
+}
+function admUsuarioLimpiar() {
+  ['adm-u-id','adm-u-cedula','adm-u-nombres','adm-u-apellidos','adm-u-correo','adm-u-password'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('adm-u-perfil').value = '';
+  document.getElementById('adm-u-lbl-pwd').textContent = '*';
+}
+
+async function admUsuarioGuardar() {
+  const id = document.getElementById('adm-u-id').value;
+  const data = {
+    cedula: document.getElementById('adm-u-cedula').value.trim(),
+    nombres: document.getElementById('adm-u-nombres').value.trim(),
+    apellidos: document.getElementById('adm-u-apellidos').value.trim(),
+    correo: document.getElementById('adm-u-correo').value.trim(),
+    id_perfil: parseInt(document.getElementById('adm-u-perfil').value || '0'),
+  };
+  const pwd = document.getElementById('adm-u-password').value;
+  if (!data.cedula) { alert('Cédula requerida'); return; }
+  if (!data.id_perfil) { alert('Perfil requerido'); return; }
+  if (!id && !pwd) { alert('Contraseña requerida'); return; }
+  let r;
+  if (id) {
+    r = await fetchJSON(`/api/admin/usuarios/${id}`, { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(data) });
+    if (r.data.success && pwd) {
+      const r2 = await fetchJSON(`/api/admin/usuarios/${id}/password`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({contrasena: pwd}) });
+      if (!r2.data.success) { alert('Datos OK pero contraseña falló: ' + r2.data.error); }
+    }
+  } else {
+    data.contrasena = pwd;
+    r = await fetchJSON('/api/admin/usuarios', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(data) });
+  }
+  if (!r.data.success) { alert('Error: ' + r.data.error); return; }
+  admUsuarioLimpiar();
+  await admUsuariosCargar();
+}
+
+async function admUsuarioReset(id, cedula) {
+  const pwd = prompt(`Nueva contraseña para ${cedula} (mín 4 caracteres):`);
+  if (!pwd) return;
+  if (pwd.length < 4) { alert('Mínimo 4 caracteres'); return; }
+  const r = await fetchJSON(`/api/admin/usuarios/${id}/password`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({contrasena: pwd}) });
+  if (!r.data.success) { alert('Error: ' + r.data.error); return; }
+  alert('Contraseña actualizada');
+}
+
+async function admUsuarioEliminar(id, cedula) {
+  if (!confirm(`¿Eliminar al usuario ${cedula}?`)) return;
+  const r = await fetchJSON(`/api/admin/usuarios/${id}`, { method:'DELETE' });
+  if (!r.data.success) { alert('Error: ' + r.data.error); return; }
+  await admUsuariosCargar();
 }
 
 // ===================== MÓDULO DASHBOARD =====================
