@@ -3913,9 +3913,9 @@ function dashboardRender(d) {
   document.getElementById('dash-fuente').textContent = d.fuente_top || '';
   const renderTopCand = (lista, elId, esp) => {
     esp = esp || {};
-    // Base del % = total votos: candidatos + blanco + nulo + no marcado.
+    // Base del % = votos válidos: candidatos + voto en blanco (excluye nulo y no marcado), igual que la RNEC.
     const tot = ((lista || []).reduce((s,x) => s + (Number(x.votos)||0), 0)
-                 + (Number(esp.blanco)||0) + (Number(esp.nulo)||0) + (Number(esp.no_marcado)||0)) || 1;
+                 + (Number(esp.blanco)||0)) || 1;
     document.getElementById(elId).innerHTML = (lista || []).slice(0,10).map((c,i) => {
       const v = Number(c.votos) || 0;
       const pct = (v / tot * 100).toFixed(1);
