@@ -42,7 +42,7 @@ _conninfo = psycopg.conninfo.make_conninfo(**DB_CONFIG)
 def _configure_conn(conn):
     conn.row_factory = dict_row
 
-db_pool = ConnectionPool(_conninfo, min_size=2, max_size=10, open=False, configure=_configure_conn)
+db_pool = ConnectionPool(_conninfo, min_size=5, max_size=32, open=False, configure=_configure_conn)
 try:
     db_pool.open()
     logger.info(f"[bd] Pool conectado a {DB_CONFIG['host']}/{DB_CONFIG['dbname']}")
@@ -4052,7 +4052,7 @@ if __name__ == '__main__':
     if '--waitress' in sys.argv:
         from waitress import serve
         logger.info(f"[main] Waitress en :{port}")
-        serve(app, host='0.0.0.0', port=port, threads=8)
+        serve(app, host='0.0.0.0', port=port, threads=32)
     else:
         logger.info(f"[main] Flask dev en :{port}")
         app.run(host='0.0.0.0', port=port, debug=True)
