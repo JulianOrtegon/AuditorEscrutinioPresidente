@@ -63,6 +63,24 @@ def log_y_actividad():
     if 'user_id' in session:
         session['last_activity'] = time.time()
 
+# Perfil restringido: solo puede ver y descargar el Generador Incremental.
+# El resto de endpoints /api/ le devuelven 403. (Operar el generador —subir
+# plantilla, iniciar, detener, ejecutar— ya está bloqueado aparte por _is_admin.)
+PERFIL_SOLO_GENERADOR = 'Generador Incremental'
+_GEN_ALLOW_EXACT = {'/api/session', '/api/logout', '/api/login', '/api/dashboard/metricas'}
+
+@app.before_request
+def _restringir_perfil_solo_generador():
+    if not request.path.startswith('/api/'):
+        return  # SPA, estáticos y pantalla de login quedan libres
+    if session.get('perfil') != PERFIL_SOLO_GENERADOR:
+        return  # otros perfiles: comportamiento sin cambios
+    p = request.path
+    if p in _GEN_ALLOW_EXACT or p.startswith('/api/generador'):
+        return
+    return jsonify({'success': False,
+                    'error': 'Tu perfil solo tiene acceso al Generador Incremental'}), 403
+
 @app.after_request
 def no_cache(response):
     if response.content_type and ('text/html' in response.content_type or 'application/javascript' in response.content_type):

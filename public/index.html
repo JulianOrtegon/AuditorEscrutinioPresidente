@@ -1172,6 +1172,17 @@ function mostrarApp() {
   document.getElementById('app').style.display = 'block';
   document.getElementById('user-display').textContent =
     `${sesionUsuario.nombres || ''} ${sesionUsuario.apellidos || ''} (${sesionUsuario.perfil || '-'})`;
+
+  // Perfil restringido: solo ve el Generador Incremental (ver + descargar).
+  if ((sesionUsuario.perfil || '') === 'Generador Incremental') {
+    document.querySelectorAll('.sidebar a').forEach(a => {
+      const oc = a.getAttribute('onclick') || '';
+      if (!oc.includes("'mod-generador'")) a.style.display = 'none';
+    });
+    document.querySelectorAll('.sidebar .group-title').forEach(t => t.style.display = 'none');
+    const gl = document.querySelector(".sidebar a[onclick*='mod-generador']");
+    if (gl) { cambiarModulo('mod-generador', gl); genInit(); }
+  }
 }
 
 function cambiarModulo(modId, linkEl) {
