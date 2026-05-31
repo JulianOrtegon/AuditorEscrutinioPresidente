@@ -100,6 +100,7 @@
       <a href="#" onclick="cambiarModulo('mod-divipol', this); divipolInit(); return false;">🗺️ Divipol <span class="badge" style="background:#dcfce7;color:#166534">listo</span></a>
       <a href="#" onclick="cambiarModulo('mod-mmv-preconteo', this); mmvCargarHistorial(); return false;">📥 MMV Preconteo <span class="badge" style="background:#dcfce7;color:#166534">listo</span></a>
       <a href="#" onclick="cambiarModulo('mod-mmv-escrutinio', this); escInit(); return false;">📥 MMV Escrutinio <span class="badge" style="background:#dcfce7;color:#166534">listo</span></a>
+      <a href="#" onclick="cambiarModulo('mod-generador', this); genInit(); return false;">🤖 Generador Incremental <span class="badge" style="background:linear-gradient(135deg,#f59e0b,#ef4444);color:#fff">NUEVO</span></a>
 
       <div class="group-title">Consultas</div>
       <a href="#" onclick="cambiarModulo('mod-consulta-preconteo', this); cprInit(); return false;">🔎 Consulta Votación Preconteo <span class="badge" style="background:#dcfce7;color:#166534">listo</span></a>
@@ -270,6 +271,85 @@
         <div class="dash-section">
           <h3>🗺️ Avance escrutinio por departamento</h3>
           <div id="dash-deptos"></div>
+        </div>
+      </div>
+
+      <!-- ============== GENERADOR INCREMENTAL E14 ============== -->
+      <div id="mod-generador" class="module">
+        <style>
+          .gen-hero { background:linear-gradient(135deg,#0f766e,#0891b2,#7c3aed);
+                      color:#fff; padding:20px; border-radius:14px; margin-bottom:16px;
+                      box-shadow:0 6px 20px rgba(124,58,237,0.3); }
+          .gen-hero h2 { margin:0 0 4px; color:#fff; }
+          .gen-status { display:inline-flex; align-items:center; gap:8px; padding:6px 14px;
+                      border-radius:18px; font-weight:bold; font-size:.9em; }
+          .gen-status.on  { background:#16a34a; color:#fff; }
+          .gen-status.off { background:#6b7280; color:#fff; }
+          .gen-status .dot { width:10px;height:10px;border-radius:50%;background:#fff;animation:genPulse 1.4s infinite; }
+          .gen-status.off .dot { animation:none;opacity:.6; }
+          @keyframes genPulse { 0%,100%{transform:scale(1);opacity:1} 50%{transform:scale(1.4);opacity:.5} }
+          .gen-banner { padding:12px 14px; border-radius:10px; margin-bottom:14px; font-size:.9em; }
+          .gen-banner.warn { background:#fef3c7; color:#92400e; border-left:4px solid #f59e0b; }
+          .gen-banner.info { background:#dbeafe; color:#1e3a8a; border-left:4px solid #3b82f6; }
+          .gen-banner.err  { background:#fee2e2; color:#991b1b; border-left:4px solid #ef4444; }
+          .gen-stat-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:10px; }
+          .gen-stat { background:#fff; border-left:4px solid #3b82f6; padding:10px 12px; border-radius:8px;
+                      box-shadow:0 1px 4px rgba(0,0,0,0.06); }
+          .gen-stat .lbl { font-size:.75em; text-transform:uppercase; color:#6b7280; letter-spacing:1px; }
+          .gen-stat .val { font-size:1.5em; font-weight:bold; color:#111827; }
+          .gen-row { background:#fff; padding:14px; border-radius:10px; margin-bottom:12px;
+                     box-shadow:0 1px 4px rgba(0,0,0,0.06); }
+          .gen-tabla-cortes { width:100%; border-collapse:collapse; }
+          .gen-tabla-cortes th { background:#f3f4f6; padding:6px 8px; text-align:left; font-size:.85em; }
+          .gen-tabla-cortes td { padding:6px 8px; border-bottom:1px solid #f3f4f6; font-size:.88em; }
+          .gen-tipo-pill { display:inline-block; padding:2px 10px; border-radius:10px; font-size:.75em; font-weight:bold; }
+          .gen-tipo-pill.generado    { background:#dcfce7; color:#166534; }
+          .gen-tipo-pill.sin_cambios { background:#fef3c7; color:#92400e; }
+        </style>
+
+        <div class="gen-hero">
+          <h2>🤖 Generador Incremental E14</h2>
+          <div>Genera archivos Excel acumulativos a partir de la votación cargada en preconteo.
+               <span id="gen-status-pill" class="gen-status off"><span class="dot"></span> Inactivo</span></div>
+        </div>
+
+        <div id="gen-banner-area"></div>
+
+        <div class="gen-row">
+          <h3 style="margin:0 0 10px">📄 Plantilla actual</h3>
+          <div id="gen-plantilla-info" style="margin-bottom:10px;color:#6b7280">Sin plantilla cargada</div>
+          <div id="gen-admin-controls" style="display:none">
+            <input type="file" id="gen-file" accept=".xlsx" style="margin-right:8px"/>
+            <button class="btn" onclick="genSubirPlantilla()">📤 Subir plantilla</button>
+            <button class="btn" style="background:#6b7280;margin-left:10px" onclick="genVerPreview()">👁️ Ver mapeo</button>
+          </div>
+        </div>
+
+        <div class="gen-row">
+          <h3 style="margin:0 0 10px">⚙️ Control del generador</h3>
+          <div id="gen-control-area"></div>
+        </div>
+
+        <div class="gen-row">
+          <h3 style="margin:0 0 10px">📊 Estado</h3>
+          <div class="gen-stat-grid" id="gen-stats"></div>
+        </div>
+
+        <div class="gen-row">
+          <h3 style="margin:0 0 10px">📜 Historial de cortes</h3>
+          <div id="gen-cortes-area"></div>
+        </div>
+
+        <div id="gen-preview-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;
+             background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center">
+          <div style="background:#fff;width:90%;max-width:900px;max-height:85vh;border-radius:12px;
+               padding:18px;overflow:auto">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+              <h3 style="margin:0">Preview del mapeo</h3>
+              <button class="btn" style="background:#dc2626" onclick="genCerrarPreview()">✖</button>
+            </div>
+            <div id="gen-preview-body"></div>
+          </div>
         </div>
       </div>
 
@@ -3178,6 +3258,207 @@ async function escEliminarUno(nombre, facceso) {
   const j = await res.json();
   if (j.success) { escCargarHistorial(); escCargarEstadoDia(); }
   else { alert('Error: ' + j.error); }
+}
+
+// ===================== MÓDULO GENERADOR INCREMENTAL =====================
+let genTimer = null;
+let genTickTimer = null;
+let genIsAdmin = false;
+let genUltimoCorteAt = null;
+let genIntervaloMin = 5;
+let genActivo = false;
+
+async function genInit() {
+  // detectar admin desde sesión actual
+  try {
+    const s = await fetchJSON('/api/session');
+    genIsAdmin = (s.data?.data?.id_perfil === 1);
+    document.getElementById('gen-admin-controls').style.display = genIsAdmin ? '' : 'none';
+  } catch (_) {}
+  await genRefrescar();
+  if (genTimer) clearInterval(genTimer);
+  genTimer = setInterval(genRefrescar, 10000);
+  if (genTickTimer) clearInterval(genTickTimer);
+  genTickTimer = setInterval(genTick, 1000);
+}
+
+function genTick() {
+  if (!genActivo || !genUltimoCorteAt) return;
+  const el = document.getElementById('gen-prox-corte');
+  if (!el) return;
+  const elapsed = (Date.now() - genUltimoCorteAt) / 1000;
+  const rest = Math.max(0, genIntervaloMin * 60 - elapsed);
+  const mm = Math.floor(rest / 60), ss = Math.floor(rest % 60);
+  el.textContent = `${String(mm).padStart(2,'0')}:${String(ss).padStart(2,'0')}`;
+}
+
+async function genRefrescar() {
+  try {
+    const r = await fetchJSON('/api/generador/estado');
+    if (!r.data.success) return;
+    const d = r.data.data;
+    const est = d.estado || {};
+    const p = d.plantilla;
+    genActivo = !!est.activo;
+    genIntervaloMin = est.intervalo_min || 5;
+    genUltimoCorteAt = est.ultimo_corte_at ? new Date(est.ultimo_corte_at).getTime() : null;
+
+    document.getElementById('gen-status-pill').className = 'gen-status ' + (genActivo ? 'on' : 'off');
+    document.getElementById('gen-status-pill').innerHTML = `<span class="dot"></span> ${genActivo ? 'Activo' : 'Inactivo'}`;
+
+    // Banner alertas
+    const bArea = document.getElementById('gen-banner-area');
+    let banners = '';
+    if (!p) {
+      banners += `<div class="gen-banner warn">⚠️ No hay plantilla cargada. ${genIsAdmin ? 'Sube una para empezar.' : 'Espera a que admin cargue la plantilla.'}</div>`;
+    } else {
+      if (d.mesas_resueltas < d.mesas_total) {
+        const sin = d.mesas_total - d.mesas_resueltas;
+        banners += `<div class="gen-banner warn">⚠️ ${sin} de ${d.mesas_total} mesas no se mapearon contra divipol. Esas filas no recibirán votos. <a href="#" onclick="genVerPreview();return false;" style="color:inherit;text-decoration:underline">Ver detalle</a></div>`;
+      }
+      if (d.candidatos_resueltos < d.candidatos_total) {
+        banners += `<div class="gen-banner err">❌ ${d.candidatos_total - d.candidatos_resueltos} candidato(s) sin mapear. El generador NO produrá datos confiables hasta resolverlo. <a href="#" onclick="genVerPreview();return false;" style="color:inherit;text-decoration:underline">Ver detalle</a></div>`;
+      }
+    }
+    if (genActivo && est.skipped_consecutivos > 0) {
+      banners += `<div class="gen-banner warn">⚠️ Los últimos <b>${est.skipped_consecutivos}</b> corte(s) no detectaron cambios en preconteo. Verifica que MMV Preconteo se esté cargando.</div>`;
+    }
+    bArea.innerHTML = banners;
+
+    // Plantilla info
+    document.getElementById('gen-plantilla-info').innerHTML = p
+      ? `<b>${p.nombre}</b> — ${d.mesas_resueltas}/${d.mesas_total} mesas resueltas · ${d.candidatos_resueltos}/${d.candidatos_total} candidatos · cargada ${new Date(p.fecha_carga).toLocaleString('es-CO')}`
+      : '<i style="color:#9ca3af">Sin plantilla cargada</i>';
+
+    // Control
+    const ca = document.getElementById('gen-control-area');
+    if (!genIsAdmin) {
+      ca.innerHTML = `<p style="color:#6b7280">Solo el administrador puede operar el generador. Estado: <b>${genActivo?'Activo':'Inactivo'}</b>. Intervalo: <b>${genIntervaloMin} min</b>.</p>`;
+    } else if (!p) {
+      ca.innerHTML = `<p style="color:#6b7280">Carga una plantilla primero.</p>`;
+    } else if (genActivo) {
+      ca.innerHTML = `
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <span>Intervalo: <b>${genIntervaloMin} min</b></span>
+          <span>· Próximo corte en <b id="gen-prox-corte" style="font-family:monospace">--:--</b></span>
+          <button class="btn" style="background:#dc2626" onclick="genDetener()">⏹️ Detener</button>
+          <button class="btn" style="background:#0891b2" onclick="genEjecutarAhora()">⚡ Ejecutar ahora</button>
+        </div>`;
+    } else {
+      ca.innerHTML = `
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <label>Intervalo (min):
+            <select id="gen-intervalo-sel">
+              <option value="1">1</option>
+              <option value="5" selected>5</option>
+              <option value="10">10</option>
+              <option value="15">15</option>
+              <option value="30">30</option>
+            </select>
+          </label>
+          <button class="btn" style="background:#16a34a" onclick="genIniciar()">▶️ Iniciar</button>
+          <button class="btn" style="background:#0891b2" onclick="genEjecutarAhora()">⚡ Ejecutar un corte ahora</button>
+        </div>`;
+    }
+
+    // Stats
+    document.getElementById('gen-stats').innerHTML = `
+      <div class="gen-stat"><div class="lbl">Cortes generados</div><div class="val">${d.cortes_reales}</div></div>
+      <div class="gen-stat" style="border-left-color:#f59e0b"><div class="lbl">Sin cambios</div><div class="val">${d.cortes_saltados}</div></div>
+      <div class="gen-stat" style="border-left-color:#10b981"><div class="lbl">Último corte #</div><div class="val">${est.ultimo_corte_num||0}</div></div>
+      <div class="gen-stat" style="border-left-color:#8b5cf6"><div class="lbl">Último corte</div><div class="val" style="font-size:1em">${est.ultimo_corte_at?new Date(est.ultimo_corte_at).toLocaleString('es-CO'):'—'}</div></div>
+      <div class="gen-stat" style="border-left-color:#ec4899"><div class="lbl">Skipped seguidos</div><div class="val">${est.skipped_consecutivos||0}</div></div>`;
+
+    // Cortes
+    await genCargarCortes();
+  } catch (e) {
+    console.error('[gen] refrescar', e);
+  }
+}
+
+async function genCargarCortes() {
+  try {
+    const r = await fetchJSON('/api/generador/cortes?limit=50');
+    const rows = r.data.data || [];
+    if (rows.length === 0) {
+      document.getElementById('gen-cortes-area').innerHTML = '<p style="color:#9ca3af;font-style:italic">Sin cortes todavía</p>';
+      return;
+    }
+    const html = `<table class="gen-tabla-cortes">
+      <thead><tr><th>#</th><th>Tipo</th><th>Fecha</th><th>Mesas reportadas</th><th>Total votos</th><th>Acción</th></tr></thead>
+      <tbody>${rows.map(r => `
+        <tr>
+          <td><b>${r.num_corte}</b></td>
+          <td><span class="gen-tipo-pill ${r.tipo}">${r.tipo==='generado'?'✓ generado':'⏭️ sin cambios'}</span></td>
+          <td>${new Date(r.fecha).toLocaleString('es-CO')}</td>
+          <td style="text-align:right;font-family:monospace">${(r.mesas_reportadas||0).toLocaleString('es-CO')}</td>
+          <td style="text-align:right;font-family:monospace">${(r.total_votos||0).toLocaleString('es-CO')}</td>
+          <td>${r.tipo==='generado' ? `<a class="btn" href="/api/generador/cortes/${r.id}/descargar" style="background:#10b981;text-decoration:none">⬇️ Descargar</a>` : '<span style="color:#9ca3af">—</span>'}</td>
+        </tr>`).join('')}</tbody></table>`;
+    document.getElementById('gen-cortes-area').innerHTML = html;
+  } catch (e) { console.error(e); }
+}
+
+async function genSubirPlantilla() {
+  const f = document.getElementById('gen-file').files[0];
+  if (!f) { alert('Seleccione un archivo .xlsx'); return; }
+  const fd = new FormData(); fd.append('archivo', f);
+  try {
+    const r = await fetch('/api/generador/plantilla', { method:'POST', body: fd });
+    const j = await r.json();
+    if (!j.success) { alert('Error: ' + j.error); return; }
+    alert(`Plantilla cargada: ${j.data.mesas_resueltas}/${j.data.mesas_total} mesas resueltas, ${j.data.candidatos_resueltos}/${j.data.candidatos_total} candidatos resueltos.`);
+    document.getElementById('gen-file').value = '';
+    await genRefrescar();
+  } catch (e) { alert('Error: ' + e.message); }
+}
+
+async function genVerPreview() {
+  try {
+    const r = await fetchJSON('/api/generador/plantilla/preview');
+    if (!r.data.success || !r.data.data) { alert('Sin plantilla'); return; }
+    const d = r.data.data;
+    const body = document.getElementById('gen-preview-body');
+    const sinMesa = d.mesas.filter(m => !m.idmesa);
+    const sinCand = d.candidatos.filter(c => !c.codcandidato);
+    body.innerHTML = `
+      <p><b>Plantilla:</b> ${d.plantilla.nombre} · ${d.mesas_resueltas}/${d.mesas.length} mesas · ${d.candidatos_resueltos}/${d.candidatos.length} candidatos</p>
+      <h4 style="margin-top:14px">Candidatos</h4>
+      <table class="gen-tabla-cortes"><thead><tr><th>Col</th><th>Header en plantilla</th><th>Alias</th><th>Candidato BD</th></tr></thead>
+      <tbody>${d.candidatos.map(c => `<tr>
+        <td>${c.columna_xlsx + 1}</td><td>${c.header_text}</td><td>${c.alias||''}</td>
+        <td>${c.codcandidato ? '✓ ' + (c.nomcandidato||c.codcandidato) : '<span style="color:#dc2626">✖ no mapeado</span>'}</td>
+      </tr>`).join('')}</tbody></table>
+      ${sinMesa.length ? `<h4 style="margin-top:14px;color:#dc2626">Mesas sin mapear (${sinMesa.length})</h4>
+        <table class="gen-tabla-cortes"><thead><tr><th>Fila</th><th>Mesa ID</th><th>Depto</th><th>Mpio</th><th>Puesto</th><th>Mesa</th></tr></thead>
+        <tbody>${sinMesa.slice(0,200).map(m => `<tr><td>${m.fila_xlsx}</td><td>${m.mesa_id_str||''}</td><td>${m.nomdepto||''}</td><td>${m.nommipio||''}</td><td>${m.nompuesto||''}</td><td>${m.mesa_num||''}</td></tr>`).join('')}
+        ${sinMesa.length>200?'<tr><td colspan="6" style="text-align:center;color:#999">... y '+(sinMesa.length-200)+' más</td></tr>':''}
+        </tbody></table>` : ''}`;
+    document.getElementById('gen-preview-modal').style.display = 'flex';
+  } catch (e) { alert(e.message); }
+}
+function genCerrarPreview(){ document.getElementById('gen-preview-modal').style.display = 'none'; }
+
+async function genIniciar() {
+  const intervalo = parseInt(document.getElementById('gen-intervalo-sel').value || '5');
+  const r = await fetchJSON('/api/generador/iniciar', { method:'POST', body: JSON.stringify({intervalo_min:intervalo}), headers:{'Content-Type':'application/json'} });
+  if (!r.data.success) { alert('Error: ' + r.data.error); return; }
+  await genRefrescar();
+}
+
+async function genDetener() {
+  if (!confirm('¿Detener el generador?')) return;
+  const r = await fetchJSON('/api/generador/detener', { method:'POST' });
+  if (!r.data.success) { alert('Error: ' + r.data.error); return; }
+  await genRefrescar();
+}
+
+async function genEjecutarAhora() {
+  const r = await fetchJSON('/api/generador/ejecutar-ahora', { method:'POST' });
+  if (!r.data.success) { alert('Error: ' + r.data.error); return; }
+  const d = r.data.data;
+  alert(`Corte #${d.num_corte} · ${d.tipo==='generado'?'archivo generado':'sin cambios'} · ${d.mesas_reportadas} mesas`);
+  await genRefrescar();
 }
 
 // ===================== MÓDULO DASHBOARD =====================

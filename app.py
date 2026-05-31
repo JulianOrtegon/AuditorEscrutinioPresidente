@@ -3015,6 +3015,547 @@ def health():
     except Exception as e:
         return jsonify({'success': False, 'db': 'error', 'error': str(e)}), 500
 
+# ==================== GENERADOR INCREMENTAL E14 ====================
+import hashlib, threading as _threading, re as _re_gen
+from werkzeug.utils import secure_filename as _secure
+
+GEN_DIR_PLANTILLAS = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads', 'plantillas')
+GEN_DIR_CORTES     = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'generated')
+os.makedirs(GEN_DIR_PLANTILLAS, exist_ok=True)
+os.makedirs(GEN_DIR_CORTES, exist_ok=True)
+
+_gen_stop = _threading.Event()
+_gen_thread = None
+_gen_thread_lock = _threading.Lock()
+
+def _gen_norm(s):
+    if s is None: return ''
+    s = str(s).strip().upper()
+    for a, b in (('Á','A'),('É','E'),('Í','I'),('Ó','O'),('Ú','U'),('Ü','U'),('Ñ','N')):
+        s = s.replace(a, b)
+    s = _re_gen.sub(r'[^A-Z0-9 ]', ' ', s)
+    s = _re_gen.sub(r'\s+', ' ', s).strip()
+    return s
+
+def _gen_extraer_alias_candidato(header):
+    """De '#1 CEPEDA CASTRO' devuelve ('CEPEDA CASTRO', 1) — alias y posible cod_tarjeton."""
+    if not header: return None, None
+    m = _re_gen.match(r'\s*#?\s*(\d+)\s+(.*)$', str(header).strip())
+    if m:
+        return _gen_norm(m.group(2)), int(m.group(1))
+    return _gen_norm(header), None
+
+def _gen_parsear_plantilla(ruta):
+    """Lee el XLSX y devuelve (mesas_raw, candidatos_raw). NO toca BD."""
+    import openpyxl
+    wb = openpyxl.load_workbook(ruta, read_only=True, data_only=True)
+    ws = wb[wb.sheetnames[0]]
+    rows = list(ws.iter_rows(values_only=True))
+    wb.close()
+    if len(rows) < 6:
+        raise ValueError('Plantilla sin filas suficientes')
+    # Buscar fila de headers: primera fila cuyo col 0 sea exactamente "MESA ID"
+    fila_hdr = None
+    for i, r in enumerate(rows[:15]):
+        if r and r[0] and _gen_norm(r[0]) == 'MESA ID':
+            fila_hdr = i; break
+    if fila_hdr is None:
+        raise ValueError('No encontré la fila de encabezados (Mesa ID)')
+    hdr = rows[fila_hdr]
+    # Localizar columnas
+    cols = {'mesa_id':0, 'depto':None, 'mpio':None, 'puesto':None, 'mesa':None,
+            'blanco':None, 'nulo':None, 'nomarc':None, 'total':None}
+    candidatos = []  # [(col_idx, header_text, alias, cod_tarjeton)]
+    for j, h in enumerate(hdr):
+        if h is None: continue
+        hs = _gen_norm(h)
+        if hs == 'MESA ID' or 'MESA ID' in hs: cols['mesa_id'] = j
+        elif hs in ('DEPARTAMENTO','DEPTO'): cols['depto'] = j
+        elif hs in ('MUNICIPIO','MPIO','MUNICIPIO MESA'): cols['mpio'] = j
+        elif hs in ('PUESTO',): cols['puesto'] = j
+        elif hs == 'MESA': cols['mesa'] = j
+        elif 'BLANCO' in hs: cols['blanco'] = j
+        elif 'NULO' in hs: cols['nulo'] = j
+        elif 'NO MARCADO' in hs or 'NOMARCADO' in hs: cols['nomarc'] = j
+        elif 'TOTAL' in hs: cols['total'] = j
+        elif _re_gen.match(r'\s*#?\s*\d+\s+', str(h)):
+            alias, cod = _gen_extraer_alias_candidato(h)
+            candidatos.append((j, str(h).strip(), alias, cod))
+    if not all([cols['depto'] is not None, cols['mpio'] is not None,
+                cols['puesto'] is not None, cols['mesa'] is not None]):
+        raise ValueError(f'Faltan columnas requeridas: cols={cols}')
+    if not candidatos:
+        raise ValueError('No detecté columnas de candidatos (formato esperado: "#N APELLIDO")')
+
+    mesas_raw = []
+    for i in range(fila_hdr + 1, len(rows)):
+        r = rows[i]
+        if not r or not r[cols['mesa_id']]: continue
+        mid = str(r[cols['mesa_id']]).strip()
+        if mid.upper() == 'TOTALES': break
+        mesas_raw.append({
+            'fila': i + 1,  # 1-indexed para openpyxl
+            'mesa_id': mid,
+            'depto': r[cols['depto']],
+            'mpio': r[cols['mpio']],
+            'puesto': r[cols['puesto']],
+            'mesa': r[cols['mesa']],
+        })
+    return {
+        'mesas': mesas_raw,
+        'candidatos': candidatos,
+        'cols': cols,
+    }
+
+def _gen_resolver_mesas(cur, mesas_raw):
+    """Cruza nombres con divipol_presidencial_2026 para obtener (idmesa, coddepto, ...)."""
+    cur.execute("""
+        SELECT dm.idmesa, d.coddepto, d.codmipio, d.codzona, d.codpuesto,
+               UPPER(d.nomdepto) AS nd, UPPER(d.nommipio) AS nm, UPPER(d.nompuesto) AS np,
+               LPAD(dm.mesa::text,3,'0') AS mesa_str,
+               dm.mesa AS mesa_num
+        FROM divipol_presidencial_2026 d
+        JOIN divipolmesa_presidencial_2026 dm ON dm.iddivipol = d.iddivipol
+        WHERE d.clase='P'
+    """)
+    mapa = {}
+    for row in cur.fetchall():
+        k = (_gen_norm(row['nd']), _gen_norm(row['nm']), _gen_norm(row['np']), row['mesa_str'])
+        mapa[k] = (row['idmesa'], row['coddepto'], row['codmipio'],
+                   row['codzona'], row['codpuesto'], row['mesa_num'])
+    resueltas = []
+    for m in mesas_raw:
+        mesa_str = str(m['mesa'] or '').strip().zfill(3)
+        k = (_gen_norm(m['depto']), _gen_norm(m['mpio']), _gen_norm(m['puesto']), mesa_str)
+        hit = mapa.get(k)
+        out = dict(m)
+        out['mesa_norm'] = mesa_str
+        if hit:
+            out['idmesa'], out['coddepto'], out['codmipio'], out['codzona'], out['codpuesto'], out['mesa_int'] = hit
+        else:
+            out['idmesa'] = None
+            out['coddepto'] = out['codmipio'] = out['codzona'] = None
+            out['codpuesto'] = None; out['mesa_int'] = None
+        resueltas.append(out)
+    return resueltas
+
+def _gen_resolver_candidatos(cur, candidatos_raw):
+    """Mapea cada columna de candidato al codcandidato real por apellido(s)."""
+    cur.execute("SELECT codcandidato, nomcandidato, num_tarjeton FROM candidatos_presidencial_2026")
+    cands = [(c['codcandidato'], _gen_norm(c['nomcandidato']), c['num_tarjeton']) for c in cur.fetchall()]
+    out = []
+    for col_idx, header, alias, cod_tarj in candidatos_raw:
+        match = None
+        # 1) por num_tarjeton si está
+        if cod_tarj is not None:
+            for cc, _, nt in cands:
+                if nt is not None and int(nt) == cod_tarj:
+                    match = cc; break
+        # 2) por todas las palabras del alias dentro de nomcandidato
+        if not match and alias:
+            tokens = [t for t in alias.split() if len(t) >= 3]
+            for cc, nom, _ in cands:
+                if tokens and all(t in nom for t in tokens):
+                    match = cc; break
+        # 3) por la primera palabra del alias
+        if not match and alias:
+            first = alias.split()[0] if alias.split() else ''
+            if len(first) >= 4:
+                for cc, nom, _ in cands:
+                    if first in nom:
+                        match = cc; break
+        out.append({'columna_xlsx': col_idx, 'header_text': header, 'alias': alias, 'codcandidato': match})
+    return out
+
+def _gen_estado_get(cur):
+    cur.execute("SELECT * FROM gen_estado WHERE id=1")
+    return cur.fetchone()
+
+def _gen_get_plantilla_activa(cur):
+    cur.execute("""SELECT * FROM gen_plantilla_e14
+                   WHERE activa=TRUE
+                   ORDER BY fecha_carga DESC LIMIT 1""")
+    return cur.fetchone()
+
+@app.route('/api/generador/plantilla', methods=['POST'])
+def gen_subir_plantilla():
+    if not _is_admin():
+        return jsonify({'success': False, 'error': 'Solo admin'}), 403
+    if 'archivo' not in request.files:
+        return jsonify({'success': False, 'error': 'Falta archivo'}), 400
+    f = request.files['archivo']
+    if not f.filename.lower().endswith('.xlsx'):
+        return jsonify({'success': False, 'error': 'Solo se acepta .xlsx'}), 400
+    safe = _secure(f.filename)
+    ts = _time_mod.strftime('%Y%m%d_%H%M%S', _time_mod.localtime())
+    nombre_archivo = f'{ts}_{safe}'
+    ruta = os.path.join(GEN_DIR_PLANTILLAS, nombre_archivo)
+    f.save(ruta)
+    try:
+        parsed = _gen_parsear_plantilla(ruta)
+    except Exception as e:
+        os.unlink(ruta)
+        return jsonify({'success': False, 'error': f'Plantilla inválida: {e}'}), 400
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("UPDATE gen_plantilla_e14 SET activa=FALSE WHERE activa=TRUE")
+                cur.execute("""INSERT INTO gen_plantilla_e14
+                               (nombre, ruta_servidor, mesas_total, candidatos_total, usuario)
+                               VALUES (%s,%s,%s,%s,%s) RETURNING id""",
+                            (f.filename, ruta, len(parsed['mesas']),
+                             len(parsed['candidatos']), session.get('cedula') or ''))
+                pid = cur.fetchone()['id']
+                mesas_res = _gen_resolver_mesas(cur, parsed['mesas'])
+                cur.executemany("""INSERT INTO gen_plantilla_mesas
+                                   (plantilla_id, fila_xlsx, mesa_id_str, nomdepto, nommipio,
+                                    nompuesto, mesa_num, coddepto, codmipio, codzona, codpuesto, mesa, idmesa)
+                                   VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                                [(pid, m['fila'], m['mesa_id'], m['depto'], m['mpio'],
+                                  m['puesto'], m['mesa_norm'], m['coddepto'], m['codmipio'],
+                                  m['codzona'], m['codpuesto'], m['mesa_int'], m['idmesa'])
+                                 for m in mesas_res])
+                cands_res = _gen_resolver_candidatos(cur, parsed['candidatos'])
+                cur.executemany("""INSERT INTO gen_plantilla_candidatos
+                                   (plantilla_id, columna_xlsx, header_text, alias, codcandidato)
+                                   VALUES (%s,%s,%s,%s,%s)""",
+                                [(pid, c['columna_xlsx'], c['header_text'],
+                                  c['alias'], c['codcandidato']) for c in cands_res])
+                cur.execute("UPDATE gen_estado SET plantilla_id=%s WHERE id=1", (pid,))
+                conn.commit()
+                mesas_ok = sum(1 for m in mesas_res if m['idmesa'])
+                cands_ok = sum(1 for c in cands_res if c['codcandidato'])
+        return jsonify({'success': True, 'data': {
+            'plantilla_id': pid, 'mesas_total': len(mesas_res), 'mesas_resueltas': mesas_ok,
+            'candidatos_total': len(cands_res), 'candidatos_resueltos': cands_ok
+        }})
+    except Exception as e:
+        logger.exception('[gen/plantilla]')
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/generador/plantilla/preview', methods=['GET'])
+def gen_plantilla_preview():
+    err = _require_session()
+    if err: return err
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                p = _gen_get_plantilla_activa(cur)
+                if not p:
+                    return jsonify({'success': True, 'data': None})
+                cur.execute("""SELECT fila_xlsx, mesa_id_str, nomdepto, nommipio, nompuesto,
+                                       mesa_num, idmesa
+                               FROM gen_plantilla_mesas WHERE plantilla_id=%s
+                               ORDER BY fila_xlsx""", (p['id'],))
+                mesas = cur.fetchall()
+                cur.execute("""SELECT columna_xlsx, header_text, alias, codcandidato,
+                                      (SELECT nomcandidato FROM candidatos_presidencial_2026
+                                       WHERE codcandidato=g.codcandidato) AS nomcandidato
+                               FROM gen_plantilla_candidatos g
+                               WHERE plantilla_id=%s ORDER BY columna_xlsx""", (p['id'],))
+                cands = cur.fetchall()
+        return jsonify({'success': True, 'data': {
+            'plantilla': dict(p),
+            'mesas': mesas,
+            'candidatos': cands,
+            'mesas_resueltas': sum(1 for m in mesas if m['idmesa']),
+            'candidatos_resueltos': sum(1 for c in cands if c['codcandidato']),
+        }})
+    except Exception as e:
+        logger.exception('[gen/plantilla/preview]')
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+def _gen_snapshot_y_hash(cur, plantilla_id):
+    """Trae los votos actuales del preconteo para las mesas de la plantilla. Devuelve (datos, hash, total_votos, mesas_reportadas)."""
+    cur.execute("""
+        SELECT pm.fila_xlsx, p.codcandidato, SUM(p.votos)::BIGINT AS votos
+        FROM gen_plantilla_mesas pm
+        JOIN preconteo_presidencial_2026 p
+          ON p.coddepto = pm.coddepto AND p.codmipio = pm.codmipio
+         AND p.codzona  = pm.codzona  AND p.codpuesto = pm.codpuesto
+         AND p.mesa     = pm.mesa
+        WHERE pm.plantilla_id=%s AND pm.idmesa IS NOT NULL
+        GROUP BY pm.fila_xlsx, p.codcandidato
+    """, (plantilla_id,))
+    datos = {}  # fila_xlsx -> {codcand: votos}
+    total = 0
+    for r in cur.fetchall():
+        datos.setdefault(r['fila_xlsx'], {})[r['codcandidato']] = int(r['votos'] or 0)
+        total += int(r['votos'] or 0)
+    # hash determinista
+    seria = ''
+    for fila in sorted(datos):
+        for cc in sorted(datos[fila]):
+            seria += f'{fila}|{cc}|{datos[fila][cc]};'
+    h = hashlib.md5(seria.encode()).hexdigest() if seria else 'EMPTY'
+    return datos, h, total, len(datos)
+
+def _gen_construir_excel(plantilla_ruta, datos, mapeo_cols_cand, fila_a_geo,
+                          plantilla_nombre, num_corte, mesas_rep, total_votos, ts_str):
+    """Carga plantilla y rellena las filas que tienen datos."""
+    import openpyxl
+    wb = openpyxl.load_workbook(plantilla_ruta)
+    ws = wb[wb.sheetnames[0]]
+    # Buscar columnas especiales por header
+    cols_blanco = cols_nulo = cols_nomarc = cols_total = None
+    fila_hdr = None
+    for r in range(1, min(ws.max_row, 15) + 1):
+        v = ws.cell(row=r, column=1).value
+        if v and _gen_norm(v) == 'MESA ID':
+            fila_hdr = r; break
+    if fila_hdr:
+        for c in range(1, ws.max_column + 1):
+            h = _gen_norm(ws.cell(row=fila_hdr, column=c).value)
+            if 'BLANCO' in h: cols_blanco = c
+            elif 'NULO' in h: cols_nulo = c
+            elif 'NO MARCADO' in h or 'NOMARCADO' in h: cols_nomarc = c
+            elif h == 'TOTAL' or 'TOTAL' in h: cols_total = c
+    # Llenar filas con datos
+    for fila, votos_cand in datos.items():
+        suma = 0
+        for col_xlsx, codcand in mapeo_cols_cand.items():
+            if codcand and codcand in votos_cand:
+                v = votos_cand[codcand]
+                ws.cell(row=fila, column=col_xlsx + 1).value = v  # col_xlsx 0-indexed
+                suma += v
+        if cols_blanco and 996 in votos_cand:
+            ws.cell(row=fila, column=cols_blanco).value = votos_cand[996]; suma += votos_cand[996]
+        if cols_nulo and 997 in votos_cand:
+            ws.cell(row=fila, column=cols_nulo).value = votos_cand[997]; suma += votos_cand[997]
+        if cols_nomarc and 998 in votos_cand:
+            ws.cell(row=fila, column=cols_nomarc).value = votos_cand[998]; suma += votos_cand[998]
+        if cols_total:
+            ws.cell(row=fila, column=cols_total).value = suma
+    # Anotar el subtítulo (fila 2 si parece subtítulo)
+    try:
+        cell_a2 = ws.cell(row=2, column=1)
+        cell_a2.value = f'Corte #{num_corte} | {ts_str} | {mesas_rep} mesas reportadas | {total_votos:,} votos'
+    except Exception:
+        pass
+    base = os.path.splitext(plantilla_nombre)[0]
+    nombre_out = f'{base}_corte_{num_corte:04d}_{ts_str.replace(":","").replace(" ","_").replace("-","")}.xlsx'
+    ruta_out = os.path.join(GEN_DIR_CORTES, nombre_out)
+    wb.save(ruta_out)
+    return nombre_out, ruta_out
+
+def _gen_ejecutar_corte():
+    """Ejecuta un corte. Devuelve dict con resultado."""
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            est = _gen_estado_get(cur)
+            if not est:
+                return {'ok': False, 'error': 'Sin estado'}
+            p = _gen_get_plantilla_activa(cur)
+            if not p:
+                return {'ok': False, 'error': 'Sin plantilla activa'}
+            datos, h, total_v, mesas_rep = _gen_snapshot_y_hash(cur, p['id'])
+            num_corte = (est['ultimo_corte_num'] or 0) + 1
+            ts_local = _time_mod.localtime()
+            ts_str = _time_mod.strftime('%Y-%m-%d %H:%M:%S', ts_local)
+            ts_fname = _time_mod.strftime('%Y%m%d_%H%M%S', ts_local)
+            # ¿Sin cambios?
+            if est['ultimo_hash'] and est['ultimo_hash'] == h:
+                cur.execute("""INSERT INTO gen_cortes
+                               (plantilla_id, num_corte, tipo, mesas_reportadas, total_votos, hash_snapshot)
+                               VALUES (%s,%s,'sin_cambios',%s,%s,%s)""",
+                            (p['id'], num_corte, mesas_rep, total_v, h))
+                cur.execute("""UPDATE gen_estado
+                               SET ultimo_corte_num=%s, ultimo_corte_at=NOW(),
+                                   skipped_consecutivos=skipped_consecutivos+1
+                               WHERE id=1""", (num_corte,))
+                conn.commit()
+                return {'ok': True, 'tipo': 'sin_cambios', 'num_corte': num_corte,
+                        'mesas_reportadas': mesas_rep, 'total_votos': total_v}
+            # Generar archivo
+            cur.execute("""SELECT columna_xlsx, codcandidato FROM gen_plantilla_candidatos
+                           WHERE plantilla_id=%s""", (p['id'],))
+            mapeo_cols = {r['columna_xlsx']: r['codcandidato'] for r in cur.fetchall()}
+            cur.execute("""SELECT fila_xlsx, coddepto, codmipio, codzona, codpuesto, mesa
+                           FROM gen_plantilla_mesas WHERE plantilla_id=%s""", (p['id'],))
+            geo = {r['fila_xlsx']: r for r in cur.fetchall()}
+            nombre, ruta = _gen_construir_excel(
+                p['ruta_servidor'], datos, mapeo_cols, geo,
+                p['nombre'], num_corte, mesas_rep, total_v, ts_str)
+            cur.execute("""INSERT INTO gen_cortes
+                           (plantilla_id, num_corte, tipo, archivo, ruta,
+                            mesas_reportadas, total_votos, hash_snapshot)
+                           VALUES (%s,%s,'generado',%s,%s,%s,%s,%s)""",
+                        (p['id'], num_corte, nombre, ruta, mesas_rep, total_v, h))
+            cur.execute("""UPDATE gen_estado
+                           SET ultimo_corte_num=%s, ultimo_corte_at=NOW(),
+                               ultimo_hash=%s, skipped_consecutivos=0
+                           WHERE id=1""", (num_corte, h))
+            conn.commit()
+            return {'ok': True, 'tipo': 'generado', 'num_corte': num_corte, 'archivo': nombre,
+                    'mesas_reportadas': mesas_rep, 'total_votos': total_v}
+
+def _gen_loop():
+    """Hilo background: ejecuta cortes en bucle."""
+    logger.info('[gen] hilo iniciado')
+    while not _gen_stop.is_set():
+        try:
+            res = _gen_ejecutar_corte()
+            logger.info(f'[gen] corte: {res}')
+        except Exception as e:
+            logger.exception('[gen] error en corte')
+        # leer intervalo dinámicamente
+        try:
+            with get_db_connection() as conn:
+                with conn.cursor() as cur:
+                    est = _gen_estado_get(cur)
+                    if not est or not est['activo']:
+                        logger.info('[gen] estado=inactivo, saliendo del loop')
+                        break
+                    intervalo = max(1, int(est['intervalo_min'] or 5))
+        except Exception:
+            intervalo = 5
+        _gen_stop.wait(timeout=intervalo * 60)
+    logger.info('[gen] hilo terminado')
+
+@app.route('/api/generador/iniciar', methods=['POST'])
+def gen_iniciar():
+    if not _is_admin():
+        return jsonify({'success': False, 'error': 'Solo admin'}), 403
+    d = request.get_json(silent=True) or {}
+    intervalo = int(d.get('intervalo_min') or 5)
+    intervalo = max(1, min(60, intervalo))
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                p = _gen_get_plantilla_activa(cur)
+                if not p:
+                    return jsonify({'success': False, 'error': 'Cargue una plantilla primero'}), 400
+                cur.execute("""UPDATE gen_estado
+                               SET activo=TRUE, intervalo_min=%s, inicio_at=NOW(),
+                                   plantilla_id=%s
+                               WHERE id=1""", (intervalo, p['id']))
+                conn.commit()
+        with _gen_thread_lock:
+            global _gen_thread
+            if _gen_thread and _gen_thread.is_alive():
+                _gen_stop.set()
+                _gen_thread.join(timeout=2)
+            _gen_stop.clear()
+            _gen_thread = _threading.Thread(target=_gen_loop, daemon=True)
+            _gen_thread.start()
+        return jsonify({'success': True, 'data': {'intervalo_min': intervalo}})
+    except Exception as e:
+        logger.exception('[gen/iniciar]')
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/generador/detener', methods=['POST'])
+def gen_detener():
+    if not _is_admin():
+        return jsonify({'success': False, 'error': 'Solo admin'}), 403
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("UPDATE gen_estado SET activo=FALSE WHERE id=1")
+                conn.commit()
+        _gen_stop.set()
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/generador/estado', methods=['GET'])
+def gen_estado():
+    err = _require_session()
+    if err: return err
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                est = _gen_estado_get(cur)
+                p = _gen_get_plantilla_activa(cur)
+                if p:
+                    cur.execute("""SELECT COUNT(*) AS total,
+                                          SUM(CASE WHEN idmesa IS NOT NULL THEN 1 ELSE 0 END) AS ok
+                                   FROM gen_plantilla_mesas WHERE plantilla_id=%s""", (p['id'],))
+                    mres = cur.fetchone()
+                    cur.execute("""SELECT COUNT(*) AS total,
+                                          SUM(CASE WHEN codcandidato IS NOT NULL THEN 1 ELSE 0 END) AS ok
+                                   FROM gen_plantilla_candidatos WHERE plantilla_id=%s""", (p['id'],))
+                    cres = cur.fetchone()
+                cur.execute("""SELECT COUNT(*) AS gen, COUNT(*) FILTER (WHERE tipo='generado') AS reales,
+                                      COUNT(*) FILTER (WHERE tipo='sin_cambios') AS saltados
+                               FROM gen_cortes""")
+                tot = cur.fetchone()
+        thread_alive = bool(_gen_thread and _gen_thread.is_alive())
+        return jsonify({'success': True, 'data': {
+            'estado': dict(est) if est else None,
+            'thread_alive': thread_alive,
+            'plantilla': dict(p) if p else None,
+            'mesas_resueltas': (mres['ok'] if p else 0), 'mesas_total': (mres['total'] if p else 0),
+            'candidatos_resueltos': (cres['ok'] if p else 0), 'candidatos_total': (cres['total'] if p else 0),
+            'cortes_total': tot['gen'] or 0,
+            'cortes_reales': tot['reales'] or 0,
+            'cortes_saltados': tot['saltados'] or 0,
+        }})
+    except Exception as e:
+        logger.exception('[gen/estado]')
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/generador/cortes', methods=['GET'])
+def gen_cortes_lista():
+    err = _require_session()
+    if err: return err
+    try:
+        limit = int(request.args.get('limit', 100))
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""SELECT id, num_corte, tipo, archivo, mesas_reportadas,
+                                       total_votos, fecha
+                               FROM gen_cortes ORDER BY num_corte DESC LIMIT %s""", (limit,))
+                rows = cur.fetchall()
+        return jsonify({'success': True, 'data': rows})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/generador/cortes/<int:cid>/descargar', methods=['GET'])
+def gen_corte_descargar(cid):
+    err = _require_session()
+    if err: return err
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT ruta, archivo, tipo FROM gen_cortes WHERE id=%s", (cid,))
+                row = cur.fetchone()
+        if not row or row['tipo'] != 'generado':
+            return jsonify({'success': False, 'error': 'Corte sin archivo'}), 404
+        if not os.path.isfile(row['ruta']):
+            return jsonify({'success': False, 'error': 'Archivo no encontrado en servidor'}), 404
+        from flask import send_file
+        return send_file(row['ruta'], as_attachment=True, download_name=row['archivo'])
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/generador/ejecutar-ahora', methods=['POST'])
+def gen_ejecutar_manual():
+    if not _is_admin():
+        return jsonify({'success': False, 'error': 'Solo admin'}), 403
+    try:
+        res = _gen_ejecutar_corte()
+        return jsonify({'success': True, 'data': res})
+    except Exception as e:
+        logger.exception('[gen/ejecutar-ahora]')
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+def _gen_arrancar_si_activo():
+    """Llamado en boot: si gen_estado.activo=TRUE, levantar el hilo."""
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                est = _gen_estado_get(cur)
+                if est and est['activo']:
+                    global _gen_thread
+                    _gen_stop.clear()
+                    _gen_thread = _threading.Thread(target=_gen_loop, daemon=True)
+                    _gen_thread.start()
+                    logger.info('[gen] reanudado al arranque')
+    except Exception:
+        logger.exception('[gen] no pude arrancar')
+
+_gen_arrancar_si_activo()
+
 # ==================== DASHBOARD MÉTRICAS ====================
 @app.route('/api/dashboard/metricas', methods=['GET'])
 def dashboard_metricas():
