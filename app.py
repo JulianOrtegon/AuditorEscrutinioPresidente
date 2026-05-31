@@ -3669,28 +3669,29 @@ def dashboard_metricas():
                 cur.execute("SELECT COUNT(*) AS n FROM partidos_presidencial_2026")
                 out['partidos'] = cur.fetchone()['n'] or 0
 
-                # ---- Top departamentos por avance escrutinio ----
-                if ultimo > 0:
-                    cur.execute(f"""
-                        SELECT d.coddepto, MAX(d.nomdepto) AS nomdepto,
-                               COUNT(DISTINCT dm.idmesa) AS mesas_total,
-                               COUNT(DISTINCT CASE WHEN {expr} > 0 THEN dm.idmesa END) AS mesas_escr
-                        FROM divipol_presidencial_2026 d
-                        JOIN divipolmesa_presidencial_2026 dm ON dm.iddivipol = d.iddivipol
-                        LEFT JOIN seguimiento_escrutinio_presidencial_2026 s ON s.idmesa = dm.idmesa
-                        WHERE d.clase='P'
-                        GROUP BY d.coddepto
-                        ORDER BY d.coddepto
-                    """)
-                    out['top_deptos'] = cur.fetchall()
-                else:
-                    cur.execute("""SELECT d.coddepto, MAX(d.nomdepto) AS nomdepto,
-                                          COUNT(DISTINCT dm.idmesa) AS mesas_total,
-                                          0 AS mesas_escr
-                                   FROM divipol_presidencial_2026 d
-                                   JOIN divipolmesa_presidencial_2026 dm ON dm.iddivipol = d.iddivipol
-                                   WHERE d.clase='P' GROUP BY d.coddepto ORDER BY d.coddepto""")
-                    out['top_deptos'] = cur.fetchall()
+                # ---- Top departamentos por avance escrutinio + preconteo ----
+                expr_escr = expr if ultimo > 0 else '0'
+                cur.execute(f"""
+                    WITH prec_por_depto AS (
+                        SELECT coddepto,
+                               COUNT(DISTINCT (codmipio, codzona, codpuesto, mesa)) AS mesas_prec
+                        FROM preconteo_presidencial_2026
+                        WHERE votos > 0
+                        GROUP BY coddepto
+                    )
+                    SELECT d.coddepto, MAX(d.nomdepto) AS nomdepto,
+                           COUNT(DISTINCT dm.idmesa) AS mesas_total,
+                           COUNT(DISTINCT CASE WHEN {expr_escr} > 0 THEN dm.idmesa END) AS mesas_escr,
+                           COALESCE(MAX(pp.mesas_prec), 0) AS mesas_prec
+                    FROM divipol_presidencial_2026 d
+                    JOIN divipolmesa_presidencial_2026 dm ON dm.iddivipol = d.iddivipol
+                    LEFT JOIN seguimiento_escrutinio_presidencial_2026 s ON s.idmesa = dm.idmesa
+                    LEFT JOIN prec_por_depto pp ON pp.coddepto = d.coddepto
+                    WHERE d.clase='P'
+                    GROUP BY d.coddepto
+                    ORDER BY d.coddepto
+                """)
+                out['top_deptos'] = cur.fetchall()
 
                 # ---- Top candidatos por votos (último día escrutinio o preconteo) ----
                 if ultimo > 0:

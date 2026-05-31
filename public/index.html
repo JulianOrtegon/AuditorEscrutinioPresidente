@@ -208,7 +208,12 @@
           .dash-chip.b4 { background:#fce7f3; color:#9d174d; }
           .dash-chip.b5 { background:#ede9fe; color:#5b21b6; }
 
-          .dash-depto-row { display:grid; grid-template-columns:50px 1fr 70px 60px; gap:8px; padding:7px 0;
+          .dash-depto-head { display:grid; grid-template-columns:50px 1fr 110px 60px 110px 60px; gap:8px;
+                       padding:6px 0; border-bottom:2px solid #e5e7eb; font-weight:bold; color:#6b7280;
+                       font-size:.78em; text-transform:uppercase; letter-spacing:.5px; }
+          .dash-depto-head div { text-align:right; }
+          .dash-depto-head .nm { text-align:left; }
+          .dash-depto-row { display:grid; grid-template-columns:50px 1fr 110px 60px 110px 60px; gap:8px; padding:7px 0;
                        align-items:center; border-bottom:1px solid #f3f4f6; font-size:.88em; }
           .dash-depto-row b { font-family:monospace; color:#6b7280; }
           .dash-depto-row .nm { color:#111827; }
@@ -3626,14 +3631,23 @@ function dashboardRender(d) {
     '<p style="color:#999;font-style:italic">Sin datos</p>';
 
   // Top deptos
-  document.getElementById('dash-deptos').innerHTML = (d.top_deptos || []).map(x => {
-    const pct = x.mesas_total ? Math.round((x.mesas_escr||0)/x.mesas_total*100) : 0;
-    const cls = pct >= 70 ? 'hi' : pct >= 30 ? 'mid' : 'lo';
+  const clsFromPct = p => p >= 70 ? 'hi' : p >= 30 ? 'mid' : 'lo';
+  const head = `<div class="dash-depto-head">
+    <div></div><div class="nm">Departamento</div>
+    <div>Escrutinio</div><div>%</div>
+    <div>Preconteo</div><div>%</div>
+  </div>`;
+  document.getElementById('dash-deptos').innerHTML = head + (d.top_deptos || []).map(x => {
+    const tot = x.mesas_total || 0;
+    const pct_e = tot ? Math.round((x.mesas_escr||0)/tot*100) : 0;
+    const pct_p = tot ? Math.round((x.mesas_prec||0)/tot*100) : 0;
     return `<div class="dash-depto-row">
       <b>${String(x.coddepto).padStart(2,'0')}</b>
       <div class="nm">${x.nomdepto || ''}</div>
-      <div class="ct">${(x.mesas_escr||0).toLocaleString('es-CO')} / ${(x.mesas_total||0).toLocaleString('es-CO')}</div>
-      <div class="pc ${cls}">${pct}%</div>
+      <div class="ct">${(x.mesas_escr||0).toLocaleString('es-CO')} / ${tot.toLocaleString('es-CO')}</div>
+      <div class="pc ${clsFromPct(pct_e)}">${pct_e}%</div>
+      <div class="ct">${(x.mesas_prec||0).toLocaleString('es-CO')} / ${tot.toLocaleString('es-CO')}</div>
+      <div class="pc ${clsFromPct(pct_p)}">${pct_p}%</div>
     </div>`;
   }).join('') || '<p style="color:#999;font-style:italic">Sin datos</p>';
 }
