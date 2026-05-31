@@ -4012,6 +4012,18 @@ def dashboard_metricas():
                     'no_marcado': int(r['no_marcado'] or 0)
                 }
 
+                # ---- Votos especiales SIEMPRE por preconteo (base del % de la lista de preconteo) ----
+                cur.execute("""SELECT
+                                 SUM(CASE WHEN codcandidato=996 THEN votos ELSE 0 END) AS blanco,
+                                 SUM(CASE WHEN codcandidato=997 THEN votos ELSE 0 END) AS nulo,
+                                 SUM(CASE WHEN codcandidato=998 THEN votos ELSE 0 END) AS no_marcado
+                               FROM preconteo_presidencial_2026""")
+                rp = cur.fetchone()
+                out['especiales_preconteo'] = {
+                    'blanco': int(rp['blanco'] or 0), 'nulo': int(rp['nulo'] or 0),
+                    'no_marcado': int(rp['no_marcado'] or 0)
+                }
+
                 # ---- Días de seguimiento (cuántos días procesados) ----
                 cur.execute("SELECT COUNT(*) AS n FROM dias_escrutinio_presidencial WHERE procesado=TRUE")
                 out['dias_procesados'] = cur.fetchone()['n'] or 0
